@@ -169,7 +169,7 @@ class Game:
     def train_units(self):
 
         casesANous = self.get_points_matching([ACTIVE])
-        casesSpawn = casesANous.copy()
+        casesSpawn = []
 
         # On ajoute à ces cases là les inactives / neutres 
         for case in casesANous:
@@ -187,7 +187,7 @@ class Game:
             # Olivier: choix de stratégie: on fait que des mecs niveau 3 et on fonce sur la base adverse !
             for level in [3]: # ici [3, 2] pour construire des unités de niveau 2 aussi
                 # boucle
-                casesPossibles = Point.sortNearest(self, self.get_opponent_HQ(), casesANous)
+                casesPossibles = Point.sortNearest(self, self.get_opponent_HQ(), casesSpawn)
                 for case in casesPossibles:
                     # test si rien decu
                     taken = False
@@ -208,17 +208,17 @@ class Game:
                 # pour le premier tour il faut ajouter les voisins ...
                 if len(casesANous) == 1:
                     if (self.map[0][0] == ACTIVE):
-                        casesANous.extend([Point(1,0), Point(0,1)])
+                        casesSpawn.extend([Point(1,0), Point(0,1)])
                     else:
-                        casesANous.extend([Point(10,11), Point(11,10)])
+                        casesSpawn.extend([Point(10,11), Point(11,10)])
 
-                case = Point.nearest(self, self.get_opponent_HQ(), casesANous)
+                case = Point.nearest(self, self.get_opponent_HQ(), casesSpawn)
                 if case is not None:
                     self.actions.append(f'TRAIN 1 {case.x} {case.y}')
                     self.income -= Unit.ENTRETIEN[1]
                     self.gold   -= Unit.TRAINING[1]
                     # la case va etre prise donc on ne la considere plus
-                    casesANous.remove(case)
+                    casesSpawn.remove(case)
                 else:
                     break
 

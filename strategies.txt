@@ -12,3 +12,6 @@ Idées en vrac:
   et une fois dessus, ça nous donne deux possibilités pour aller attaquer le QG
 
 - un moment il va falloir calculer une carte avec des points de cibles potentielles de mouvement : toutes les cases qui enlèvent un max de points à l'adversaire :)
+
+- actuellement nos unités se gênent dans leur déplacement.
+  Il faudrait optimiser le spawn et le déplacement des unités, en suivant des diagonales
