@@ -20,3 +20,7 @@ Integration tests
 -----------------
 Wait for contest to start :)
 https://travis-ci.org/odoucet/cig-fire
+
+Useful addons
+-------------
+https://github.com/Azkellas/cgenhancer
