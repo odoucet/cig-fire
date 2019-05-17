@@ -16,10 +16,22 @@ OPONENT = 1
 HQ = 0
 
 
-class Position:
+class Point:
     def __init__(self, x, y):
         self.x = x
         self.y = y
+
+
+    def nearest(self, point: Point, srcArray: array) -> Point:
+        nearest = null
+        nearestDist = null
+        for entity in srcArray:
+            # on stocke l'appel a distance() car c'est une fction couteuse en CPU
+            tmpDist = distance(entity, point)
+            if (nearest = null or tmpDist < nearestDist)
+                nearest = entity
+                nearestDist = tmpDist
+        return nearest
 
 
 class Unit:
@@ -27,14 +39,14 @@ class Unit:
         self.owner = owner
         self.id = id
         self.level = level
-        self.pos = Position(x, y)
+        self.pos = Point(x, y)
 
 
 class Building:
     def __init__(self, owner, type, x, y):
         self.owner = owner
         self.type = type
-        self.pos = Position(x, y)
+        self.pos = Point(x, y)
 
 
 class Game:
@@ -59,34 +71,40 @@ class Game:
             if b.type == HQ and b.owner == OPONENT:
                 return b
 
-
+    # Strategie de deplacement des unites (Olivier)
     def move_units(self):
-        center = Position(5, 5)
+        # on commence simple : on va a la case vide/adversaire la plus proche
+        # Etape 2: on stocke ces cases pour que deux guerriers aillent pas au mm endroit
+        center = Point(5, 5)
 
         for unit in self.units:
             if unit.owner == ME:
                 self.actions.append(f'MOVE {unit.id} {center.x} {center.y}')
 
 
-    def get_train_position(self):
+    def get_train_Point(self):
         hq = self.get_my_HQ()
 
         if hq.pos.x == 0:
-            return Position(0, 1)
-        return Position(11, 10)
+            return Point(0, 1)
+        return Point(11, 10)
 
 
     def train_units(self):
-        train_pos = self.get_train_position()
+        # TODO: delete def get_train_Point() and train in best spot
+        train_pos = self.get_train_Point()
 
-        if self.gold > 30:
+        # on entraine que si on a suffisemment d'income
+        # TODO: il faudra affiner en fction des autres actions sur le round
+        if self.gold > 30 and self.income > 1:
             self.actions.append(f'TRAIN 1 {train_pos.x} {train_pos.y}')
+            self.income -= 1
 
 
     def init(self):
         # Unused in Wood 3
-        number_mine_spots = int(input())
-        for i in range(number_mine_spots):
+        numberMineSpots = int(input())
+        for i in range(numberMineSpots):
             x, y = [int(j) for j in input().split()]
 
 
@@ -127,6 +145,10 @@ class Game:
         else:
             print('WAIT')
 
+
+# calcule la distance entre deux cases. Hyper utilise donc mis en global
+def distance(f, t):
+    return sqrt(pow(f.x - t.x, 2)+pow(f.y - t.y, 2))
 
 g = Game()
 
