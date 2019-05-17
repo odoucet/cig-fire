@@ -7,3 +7,8 @@ Listing des stratégies
 3) utiliser les armées pour aller attaquer l'ennemi (Luc ?)
 
 
+Idées en vrac: 
+- Mettre en destination par défaut non pas le QG ennemi mais la case en diagonale la plus proche : elle est moins "surveillée",
+  et une fois dessus, ça nous donne deux possibilités pour aller attaquer le QG
+
+- un moment il va falloir calculer une carte avec des points de cibles potentielles de mouvement : toutes les cases qui enlèvent un max de points à l'adversaire :)
