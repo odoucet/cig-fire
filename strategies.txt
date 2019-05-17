@@ -15,3 +15,6 @@ Idées en vrac:
 
 - actuellement nos unités se gênent dans leur déplacement.
   Il faudrait optimiser le spawn et le déplacement des unités, en suivant des diagonales
+
+- on pose pas de tourelles pour le moment ! Réfléchir aux endroits les plus intéressants ...
+
