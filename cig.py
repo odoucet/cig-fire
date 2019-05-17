@@ -15,50 +15,65 @@ OPONENT = 1
 # BUILDING TYPE
 HQ = 0
 
+# TILE TYPE
+NEANT = "#"
+NEUTRE = "."
+ACTIVE = "O"
+INACTIVE = "o"
+ACTIVEOPPONENT = "X"
+INACTIVEOPPONENT = "x"
+
 
 class Point:
-    def __init__(self, x, y):
+    def __init__(self, x: int, y: int):
         self.x = x
         self.y = y
 
-
-    def nearest(self, point: Point, srcArray: array) -> Point:
-        nearest = null
-        nearestDist = null
+    # Retourne le point dans srcArray le plus proche de point
+    # point: Point
+    # srcArray: Point[]
+    def nearest(self, point, srcArray):
+        nearest = None
+        nearestDist = None
         for entity in srcArray:
             # on stocke l'appel a distance() car c'est une fction couteuse en CPU
             tmpDist = distance(entity, point)
-            if (nearest = null or tmpDist < nearestDist)
+            if nearest is None or tmpDist < nearestDist:
                 nearest = entity
                 nearestDist = tmpDist
         return nearest
 
 
-class Unit:
-    def __init__(self, owner, id, level, x, y):
+class Unit (Point):
+    def __init__(self, owner, id, level, x: int, y: int):
         self.owner = owner
         self.id = id
         self.level = level
-        self.pos = Point(x, y)
+        Point.__init__(self, x, y)
 
 
-class Building:
-    def __init__(self, owner, type, x, y):
+class Building (Point):
+    def __init__(self, owner, type, x: int, y: int):
         self.owner = owner
         self.type = type
-        self.pos = Point(x, y)
+        Point.__init__(self, x, y)
 
+class Mine (Point): 
+    def __init__(self, x: int, y: int):
+        Point.__init__(self, x, y)
 
 class Game:
     def __init__(self):
         self.buildings = []
         self.units = []
         self.actions = []
+        self.mines = []
         self.gold = 0
         self.income = 0
         self.opponent_gold = 0
         self.opponent_income = 0
-
+        # init selfmap
+        self.map = [ [ None for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
 
     def get_my_HQ(self):
         for b in self.buildings:
@@ -74,18 +89,34 @@ class Game:
     # Strategie de deplacement des unites (Olivier)
     def move_units(self):
         # on commence simple : on va a la case vide/adversaire la plus proche
-        # Etape 2: on stocke ces cases pour que deux guerriers aillent pas au mm endroit
-        center = Point(5, 5)
 
+        # on recupere la liste des cases vides
+        casesVides = []
+        for x in range(WIDTH):
+            for y in range(HEIGHT):
+                # TODO: refaire cette liste mieux, on peut aller ailleurs
+                if self.map[x][y] == NEUTRE or self.map[x][y] == INACTIVEOPPONENT or self.map[x][y] == ACTIVEOPPONENT:
+                    casesVides.append(Point(x, y))
+        
+
+        # TODO Etape 2: on stocke ces cases pour que deux guerriers aillent pas au mm endroit
+        
         for unit in self.units:
             if unit.owner == ME:
-                self.actions.append(f'MOVE {unit.id} {center.x} {center.y}')
+                destination = Point.nearest(self, unit, casesVides)
+                if (destination is not None): 
+                    self.actions.append(f'MOVE {unit.id} {destination.x} {destination.y}')
+                else:
+                    # destination == HQ ennemi ! 
+                    destination = self.get_oponent_HQ()
+                    self.actions.append(f'MOVE {unit.id} {destination.x} {destination.y}')
+                    
 
 
     def get_train_Point(self):
         hq = self.get_my_HQ()
 
-        if hq.pos.x == 0:
+        if hq.x == 0:
             return Point(0, 1)
         return Point(11, 10)
 
@@ -96,7 +127,7 @@ class Game:
 
         # on entraine que si on a suffisemment d'income
         # TODO: il faudra affiner en fction des autres actions sur le round
-        if self.gold > 30 and self.income > 1:
+        if self.gold >= 10 and self.income >= 1:
             self.actions.append(f'TRAIN 1 {train_pos.x} {train_pos.y}')
             self.income -= 1
 
@@ -104,8 +135,10 @@ class Game:
     def init(self):
         # Unused in Wood 3
         numberMineSpots = int(input())
-        for i in range(numberMineSpots):
+        for _ in range(numberMineSpots):
             x, y = [int(j) for j in input().split()]
+            self.mines.append(Mine(x, y))
+
 
 
     def update(self):
@@ -118,17 +151,20 @@ class Game:
         self.opponent_gold = int(input())
         self.opponent_income = int(input())
 
-        for i in range(12):
+        for y in range(HEIGHT):
             line = input()
-            print(line, file=sys.stderr)
+            x=0
+            for char in list(line):
+                self.map[x][y] = char
+                x += 1
 
         building_count = int(input())
-        for i in range(building_count):
+        for _ in range(building_count):
             owner, building_type, x, y = [int(j) for j in input().split()]
             self.buildings.append(Building(owner, building_type, x, y))
 
         unit_count = int(input())
-        for i in range(unit_count):
+        for _ in range(unit_count):
             owner, unit_id, level, x, y = [int(j) for j in input().split()]
             self.units.append(Unit(owner, unit_id, level, x, y))
 
@@ -147,8 +183,8 @@ class Game:
 
 
 # calcule la distance entre deux cases. Hyper utilise donc mis en global
-def distance(f, t):
-    return sqrt(pow(f.x - t.x, 2)+pow(f.y - t.y, 2))
+def distance(f, t) -> float:
+    return math.sqrt(math.pow(f.x - t.x, 2)+math.pow(f.y - t.y, 2))
 
 g = Game()
 
