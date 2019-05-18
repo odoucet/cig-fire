@@ -1,5 +1,6 @@
 import sys
 import math
+import time
 
 # First draft from "starterkit"
 # https://raw.githubusercontent.com/Azkellas/a-code-of-ice-and-fire/develop/src/test/starterkit/starter.py
@@ -15,6 +16,7 @@ opponent = 1
 # BUILDING TYPE
 HQ = 0
 MINE = 1
+TOWER = 2
 
 # TILE TYPE
 NEANT = "#"
@@ -143,11 +145,20 @@ class Game:
             if unit.doNotMove == True:
                 continue
 
-            # Strategie Olivier: si niveau 3, on fonce sur la base adverse!
+            # Strategie Olivier: si niveau 3, on fonce sur l'adversaire le plus proche
             if unit.level == 3:
-                destination = self.get_opponent_HQ()
+                if not self.OpponentUnits: 
+                    # on va sur la base ennemi
+                    destination = self.get_opponent_HQ()
+                else:
+                    # on va taper de l'unité ennemie
+                    destination = Point.nearest(self, unit, self.OpponentUnits)
+
                 self.actions.append(f'MOVE {unit.id} {destination.x} {destination.y}')
-                # TODO: on met a jour notre carte avec là où devrait etre notre unité
+                # on met a jour notre carte avec là où devrait etre notre unité
+                self.map[destination.x][destination.y] = ACTIVE
+                unit.x = destination.x
+                unit.y = destination.y
                 continue
 
             # ici on devrait boucler jusqu'à trouver une bonne destination : 
@@ -166,42 +177,47 @@ class Game:
     # Stratégie d'entrainement des unites
     # La règle n'est pas claire: en fait on doit entrainer les unités sur une case vide forcément
     # et on ne peut pas "upgrader" une unité : il faut la construire avec un gros level directement
+    # TODO: optimiser ces boucles, je suis sûr qu'on fait du taff pour rien
     def train_units(self):
-
-        casesANous = self.get_points_matching([ACTIVE])
-        casesSpawn = []
-
-        # On ajoute à ces cases là les inactives / neutres 
-        for case in casesANous:
-            # TODO: on peut optimiser en spawnant sur des cases actives de l'ennemi ? A tester
-            casesSpawn.extend(Point.getAdjacentes(self, case, self.map, [INACTIVE, INACTIVEOPPONENT, NEUTRE]))
-
-        # et on deduplique
-        casesSpawn = list(dict.fromkeys(casesSpawn))
-        sys.stderr.write("DEBUG: cases a nous = "+str(len(casesANous)))
-        sys.stderr.write("DEBUG: cases vides = "+str(len(self.get_points_matching([NEUTRE]))))
 
         # Strategie: on créé pleins de soldats, et on fait du niveau 2 quand il ne reste que X cases vides
         if len(self.get_points_matching([NEUTRE])) < 30 or len(self.units) >= 10:
 
-            # Olivier: choix de stratégie: on fait que des mecs niveau 3 et on fonce sur la base adverse !
+            # Olivier: choix de stratégie: on fait que des mecs niveau 3
+            # on spawn au plus proche des troupes ennemies proches de notre base
             for level in [3]: # ici [3, 2] pour construire des unités de niveau 2 aussi
-                # boucle
-                casesPossibles = Point.sortNearest(self, self.get_opponent_HQ(), casesSpawn)
-                for case in casesPossibles:
-                    # test si rien decu
-                    taken = False
-                    for unit in self.units:
-                        if distance(unit, case) == 0: 
-                            taken = True
-                            break
-                    
-                    if taken == False and self.gold >= (Unit.TRAINING[level]) and self.income >= Unit.ENTRETIEN[level]:
-                        self.actions.append(f'TRAIN {level} {case.x} {case.y}')
-                        self.gold   -= Unit.TRAINING[level]
-                        self.income -= Unit.ENTRETIEN[level]
+                # boucle sur les troupes ennemies
+                ennemis = Point.sortNearest(self, self.get_my_HQ(), self.OpponentUnits)
+
+                for case in ennemis:
+                    # on trouve une case à nous autour ?
+                    casesAutour = Point.getAdjacentes(self, case, self.map, [ACTIVE, NEUTRE])
+                    for case in casesAutour:
+                        taken = False
+                        for unit in self.units:
+                            if distance(unit, case) == 0: 
+                                taken = True
+                                break
+                        
+                        if taken == False and self.gold >= (Unit.TRAINING[level]) and self.income >= Unit.ENTRETIEN[level]:
+                            self.actions.append(f'TRAIN {level} {case.x} {case.y}')
+                            self.gold   -= Unit.TRAINING[level]
+                            self.income -= Unit.ENTRETIEN[level]
+                            self.map[case.x][case.y] = ACTIVE # case prise maintenant
 
         else: 
+            casesANous = self.get_points_matching([ACTIVE])
+            casesSpawn = []
+
+            # On ajoute à ces cases là les inactives / neutres 
+            for case in casesANous:
+                # TODO: on peut optimiser en spawnant sur des cases actives de l'ennemi ? A tester
+                casesSpawn.extend(Point.getAdjacentes(self, case, self.map, [INACTIVE, INACTIVEOPPONENT, NEUTRE]))
+
+            # et on deduplique
+            casesSpawn = list(dict.fromkeys(casesSpawn))
+
+            # ici on entraine que du niveau 1
             while self.gold >= Unit.TRAINING[1] and self.income >= Unit.ENTRETIEN[1]:
                 # on entraine sur une case à nous, la plus proche du QG adverse
                 
@@ -217,6 +233,7 @@ class Game:
                     self.actions.append(f'TRAIN 1 {case.x} {case.y}')
                     self.income -= Unit.ENTRETIEN[1]
                     self.gold   -= Unit.TRAINING[1]
+                    self.map[case.x][case.y] = ACTIVE # case prise maintenant
                     # la case va etre prise donc on ne la considere plus
                     casesSpawn.remove(case)
                 else:
@@ -249,6 +266,28 @@ class Game:
 
     # Top priorité : protéger la base, en spawnant un soldat de niveau suffisant sur la ligne de combat d'une unité adverse
     def protect_base(self):
+
+        # On essaie d'avoir des tourelles sur les super points (defenseMap >= 20)
+        for x in range(WIDTH):
+            for y in range(HEIGHT): 
+                if self.defenseMap[x][y] is not None and self.defenseMap[x][y] >= 20:
+                    # on check qu'on a pas deja une tour
+                    built = False
+                    for building in self.buildings:
+                        if building.type == TOWER and distance(building, Point(x, y)) == 0:
+                            built = True
+                            break
+                    # et pas sur une mine
+                    for mine in self.mines:
+                        if distance(mine, Point(x, y)) == 0:
+                            built = True
+                            break
+                    if built == False and self.gold > 15:
+                        self.actions.append(f'BUILD TOWER {x} {y}')
+                        self.gold -= 15
+                        #todo: marquer case occupée
+
+
         # on se focalise sur les unités ennemies les plus proches
         units = Point.sortNearest(self, self.get_my_HQ(), self.OpponentUnits)
         if units is None:
@@ -284,6 +323,90 @@ class Game:
             self.mines.append(Mine(x, y))
 
 
+    # Construction d'une carte avec les points de defense importants chez nous
+    # Pour se faire, pour chaque case à nous on calcule notre surface si on la perd
+    # On va s'en servir pour mettre des tourelles par exemple
+
+    # TODO: fix bug, tourelle pas au bon endroit => on calcule pas les bons nombres
+    # POUR REPRODUIRE: match contre OAKOS
+    #                  seed=2755259153433054200
+    #                  tour 169 on doit calculer que si on perd (2,5) on perd bcoup, et là queud... 
+    #                  donc erreur dans l'algo
+    def calcul_carte_defense(self):
+        self.defenseMap = [ [ None for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
+        # calcul du moment: on a combien de case à nous ? 
+        nbCasesANous = 0
+        
+        # on calcule une premiere carte, sur les cases à nous, avec la distance à notre QG
+        mapANous = [ [ None for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
+        # cleanup: 
+        for x in range(WIDTH):
+            for y in range(HEIGHT):
+                if self.map[x][y] != ACTIVE:
+                    mapANous[x][y] = None
+                else:
+                    nbCasesANous += 1
+                    mapANous[x][y] = -1
+
+        # si on a pas bcoup de cases en fait on s'en fout, soit c'est trop tôt, soit on est mort
+        if nbCasesANous < 15:
+            return
+
+        # en itératif on incremente en partant du QG
+        aTraiter = [ [self.get_my_HQ(), 0] ]
+        debugi = 0
+        while len(aTraiter) > 0 and debugi < 5000:
+            debugi += 1
+            element, distance = aTraiter.pop(0)
+            mapANous[element.x][element.y] = distance
+            cases = Point.getAdjacentes(self, element, self.map, [ACTIVE])
+            for case in cases:
+                if mapANous[case.x][case.y] == -1 or mapANous[case.x][case.y] >= distance+1:
+                    aTraiter.append([ case, distance + 1])
+
+        # A partir d'ici, on a donc mapANous avec les distances au QG
+
+        # on passe maintenant au taff
+        for x in range(WIDTH):
+            for y in range(HEIGHT): 
+                if self.map[x][y] == ACTIVE:
+                    # si on est trop pres de notre QG ça sert à rien
+                    if mapANous[x][y] < 3:
+                        continue
+
+                    # la grosse formule commence ici
+                    # Etape 1 - on copie la map
+                    newMap = self.map.copy()
+
+                    # Ensuite on la modifie pour virer la case courante
+                    newMap[x][y] = INACTIVE
+
+                    # Puis pour faire ça bien, on fait un calcul récursif en prenant les cases adjacentes
+                    aTraiter = Point.getAdjacentes(self, Point(x, y), newMap, [ACTIVE])
+                    debugi = 0
+                    while len(aTraiter) > 0 and debugi < 5000:
+                        debugi += 1
+                        element = aTraiter.pop(0)
+                        # si l'element a au moins un voisin inférieur c'est bon, sinon non
+                        keepit = False
+                        for voisin in Point.getAdjacentes(self, element, newMap, [ACTIVE]):
+                            if mapANous[voisin.x][voisin.y] < mapANous[element.x][element.y]:
+                                keepit = True
+                                break
+                        if keepit is False:
+                            newMap[element.x][element.y] = INACTIVE
+                            aTraiter.extend(Point.getAdjacentes(self, Point(element.x, element.y), newMap, [ACTIVE]))
+
+                    # Maintenant on calcule le nbre de cases à nous: 
+                    nbCases = 0
+                    for tmpx in range(WIDTH):
+                        for tmpy in range(HEIGHT):
+                            if newMap[tmpx][tmpy] == ACTIVE:
+                                nbCases += 1
+                    self.defenseMap[x][y] = abs(nbCasesANous - nbCases)
+        
+        # On regarde notre carte
+        debugMap(self.defenseMap, debugi)
 
     def update(self):
         self.units.clear()
@@ -293,6 +416,7 @@ class Game:
         self.actions.clear()
 
         self.gold = int(input())
+        self.startTime = time.time()
         self.income = int(input())
         self.opponent_gold = int(input())
         self.opponent_income = int(input())
@@ -331,6 +455,9 @@ class Game:
 
 
     def build_output(self):
+        # TODO: calculer cette carte que plus tard dans la game non ?
+        self.calcul_carte_defense()
+
         self.protect_base()
         self.build_mines()
         self.train_units()
@@ -342,7 +469,11 @@ class Game:
             print(';'.join(self.actions))
         else:
             print('WAIT')
+        sys.stderr.write("Time spent in this round: "+str(self.getTotalTime())+"ms")
 
+    # get total time in ms
+    def getTotalTime(self)-> int:
+        return round((time.time() - self.startTime)*1000)
 
 # calcule la distance entre deux cases. Hyper utilise donc mis en global
 def distance(f, t) -> float:
@@ -350,9 +481,20 @@ def distance(f, t) -> float:
     if f.x == t.x and f.y == t.y:
         return 0
 
-    # TODO: si diagonale, alors distance = 2 ! vérifier la formule !
-    return math.sqrt(math.pow(f.x - t.x, 2)+math.pow(f.y - t.y, 2))
+    # On peut pas aller en diagonale donc en fait c'est simple
+    return abs(f.x - t.x)+abs(f.y - t.y)
 
+
+def debugMap(macarte, loops = 0):
+    sys.stderr.write("*** DEBUG CARTE (loops: "+str(loops)+")***\n")
+    for y in range(HEIGHT):
+        for x in range(WIDTH):
+            if macarte[x][y] is None:
+                sys.stderr.write(" **")
+            else:
+                sys.stderr.write(f" {str(macarte[x][y]):2s}")
+        sys.stderr.write("\n")
+    sys.stderr.write("\n")
 
 ################################################################
 ###### Game launcher ######
@@ -361,5 +503,6 @@ g = Game()
 g.init()
 while True:
     g.update()
+    startTime = time.time()
     g.build_output()
     g.output()
