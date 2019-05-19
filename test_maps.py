@@ -140,3 +140,16 @@ def test_map_cas3():
         ['.', '.', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', '.'], 
         ['.', '.', 'X', 'X', 'X', 'X', 'X', '#', '#', 'X', 'X', 'X'], 
         ['#', '.', '.', '.', 'X', '.', '#', '#', '#', 'X', 'X', 'X']]
+
+    # buildings:
+    g.buildings = [Building(ME, HQ, 0, 0)]
+    g.OpponentBuildings = [Building(OPPONENT, HQ, 11, 11)]
+    drawMap(g.map, "map")
+
+    g.startTime = time.time()
+    g.calcul_carte_defense()
+    drawMap(g.debugMapANous, "mapanous","defmap")
+    sys.stderr.write("Temps de construction: "+str(time.time()-g.startTime))
+
+    drawMap(g.defenseMap, "defensemap","defmap")
+    assert g.defenseMap[2][6] is not None and g.defenseMap[2][6] == 1

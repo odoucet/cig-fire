@@ -63,6 +63,7 @@ class Point:
                 cases.append(Point(x, y))
         return cases
 
+
 class Unit (Point):
     # Couts entrainement / entretien.
     TRAINING  = [ 0, 10, 20, 30]
@@ -397,23 +398,32 @@ class Game:
                     # Puis pour faire ça bien, on fait un calcul récursif en prenant les cases adjacentes
                     aTraiter = Point.getAdjacentes(self, Point(x, y), newMap, [ACTIVE])
                     debugi = 0
+                    
                     # TODO: si on a un point super important, cette boucle va mettre une plombe
                     # soit on la met en cache entre deux rounds, soit on calcule qu'un bout
                     # on prefere la solution 2 pour le moment
                     while len(aTraiter) > 0 and debugi < 500:
                         debugi += 1
                         element = aTraiter.pop(0)
+
                         # si l'element a au moins un voisin inférieur c'est bon, sinon non
                         keepit = False
+
                         for voisin in Point.getAdjacentes(self, element, newMap, [ACTIVE]):
+                            if (x == 2 and y == 6):
+                                #debug
+                                sys.stderr.write(f"voisin({voisin.x},{voisin.y})={mapANous[voisin.x][voisin.y]} compare a ({element.x},{element.y})={mapANous[element.x][element.y]}\n")
                             if mapANous[voisin.x][voisin.y] < mapANous[element.x][element.y]:
                                 keepit = True
                                 break
                         if keepit is False:
                             newMap[element.x][element.y] = INACTIVE
+                            if (x == 2 and y == 6):
+                                sys.stderr.write(f"on ajoute {element.x},{element.y} a traiter\n")
                             aTraiter.extend(Point.getAdjacentes(self, Point(element.x, element.y), newMap, [ACTIVE]))
-                    
-                    #sys.stderr.write(f"timing({x},{y}): "+str(round((time.time()-timingmapanous)*1000,1))+"ms / loops: "+str(debugi)+"\n")
+
+                    if (x == 2 and y == 6):
+                        sys.stderr.write(f"timing({x},{y}): "+str(round((time.time()-timingmapanous)*1000,1))+"ms / loops: "+str(debugi)+"\n")
                     
                     # Maintenant on calcule le nbre de cases à nous: 
                     nbCases = 0
@@ -424,8 +434,8 @@ class Game:
                     self.defenseMap[x][y] = abs(nbCasesANous - nbCases)
 
                     
-        debugPythonMap(self.map)
-        debugMap(self.defenseMap)
+        #debugPythonMap(self.map)
+        #debugMap(self.defenseMap)
         
 
     # Return false if timeout near and we should stop what we are doing
