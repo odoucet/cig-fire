@@ -104,21 +104,21 @@ def test_map_cas2():
         ['O', 'O', 'O', 'O', 'x', 'O', 'O', 'O', 'O', 'O', 'O', '#'], 
         ['O', 'O', 'O', 'O', 'x', 'O', 'O', 'O', 'O', 'O', '#', '#'], 
         ['.', '.', 'x', 'x', 'x', 'O', 'O', 'O', 'O', 'O', 'O', '.'], 
-        ['.', '.', 'x', 'x', 'O', 'O', 'O', '#', '#', 'X', 'X', 'X'], 
-        ['#', '.', '.', '.', 'x', 'x', '#', '#', '#', 'X', 'X', 'X']
+        ['.', '.', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X'], 
+        ['#', '.', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X']
     ]
 
     # buildings:
     g.buildings = [Building(ME, HQ, 0, 0)]
     g.OpponentBuildings = [Building(OPPONENT, HQ, 11, 11)]
-    #drawMap(g.map, "map")
+    drawMap(g.map, "map")
 
     g.startTime = time.time()
     g.calcul_carte_defense()
-    #drawMap(g.debugMapANous, "mapanous","defmap")
+    drawMap(g.debugMapANous, "mapanous","defmap")
     sys.stderr.write("Temps de construction: "+str(time.time()-g.startTime))
 
-    #drawMap(g.defenseMap, "defensemap","defmap")
+    drawMap(g.defenseMap, "defensemap","defmap")
     assert g.defenseMap[4][10] is not None and g.defenseMap[4][10] == 1
 
 
@@ -152,4 +152,5 @@ def test_map_cas3():
     sys.stderr.write("Temps de construction: "+str(time.time()-g.startTime))
 
     drawMap(g.defenseMap, "defensemap","defmap")
+    assert g.defenseMap[2][2] is not None and g.defenseMap[2][2] > 10
     assert g.defenseMap[2][6] is not None and g.defenseMap[2][6] == 1
