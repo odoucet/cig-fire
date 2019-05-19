@@ -25,3 +25,12 @@ il faut préférer ça.
   Pour commencer, on peut, pour les mouvements : 
     * faire un round avec juste les cases adjacentes, et calculer si y'a un truc intéressant => override
     * sinon algo actuel
+
+- calculer une carte de distance par rapport au QG ennemi : ça évitera de poser des tourelles nimporte où (plus près != distance())
+
+
+TODO
+====
+J'ai merdé les appels de fonctions Point, qui devraient pas passer tous les arguments mais faire monunite.getAdjacentes(). A réécrire
+
+Il faut coder un truc de pathfinding, car mes mecs essaient de se marcher dessus et on a pleins d'ordres invalides :(

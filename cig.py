@@ -186,26 +186,39 @@ class Game:
         if len(self.get_points_matching([NEUTRE])) < 30 or len(self.units) >= 10:
 
             # Olivier: choix de stratégie: on fait que des mecs niveau 3
-            # on spawn au plus proche des troupes ennemies proches de notre base
+            # on spawn au plus proche des troupes ennemies (ça peut être SUR l'ennemi :p)
             for level in [3]: # ici [3, 2] pour construire des unités de niveau 2 aussi
                 # boucle sur les troupes ennemies
                 ennemis = Point.sortNearest(self, self.get_my_HQ(), self.OpponentUnits)
 
-                for case in ennemis:
+                for caseEnnemi in ennemis:
+                    # si pas de tune ça sert à rien
+                    if self.gold < (Unit.TRAINING[level]) or self.income < Unit.ENTRETIEN[level]:
+                        break
+
                     # on trouve une case à nous autour ?
-                    casesAutour = Point.getAdjacentes(self, case, self.map, [ACTIVE, NEUTRE])
+                    casesAutour = Point.getAdjacentes(self, caseEnnemi, self.map, [ACTIVE, NEUTRE])
                     for case in casesAutour:
-                        taken = False
-                        for unit in self.units:
-                            if distance(unit, case) == 0: 
-                                taken = True
-                                break
-                        
-                        if taken == False and self.gold >= (Unit.TRAINING[level]) and self.income >= Unit.ENTRETIEN[level]:
-                            self.actions.append(f'TRAIN {level} {case.x} {case.y}')
+                        if self.map[case.x][case.y] == ACTIVE:
+                            # c'est à nous !
+                            self.actions.append(f'TRAIN {level} {caseEnnemi.x} {caseEnnemi.y}')
                             self.gold   -= Unit.TRAINING[level]
                             self.income -= Unit.ENTRETIEN[level]
-                            self.map[case.x][case.y] = ACTIVE # case prise maintenant
+                            self.map[caseEnnemi.x][caseEnnemi.y] = ACTIVE # case prise maintenant
+                            break
+                        else:
+                            taken = False
+                            for unit in self.units:
+                                if distance(unit, case) == 0: 
+                                    taken = True
+                                    break
+                            
+                            if taken == False:
+                                self.actions.append(f'TRAIN {level} {case.x} {case.y}')
+                                self.gold   -= Unit.TRAINING[level]
+                                self.income -= Unit.ENTRETIEN[level]
+                                self.map[case.x][case.y] = ACTIVE # case prise maintenant
+                                break
 
         else: 
             casesANous = self.get_points_matching([ACTIVE])
@@ -242,8 +255,18 @@ class Game:
                     break
 
     # Construction des mines
+    # Seulement si on est en expansion de territoire, donc qu'il reste bcoup de NEUTRAL
     # Il faut que la mine nous appartienne (case ACTIVE), avec personne dessus
     def build_mines(self):
+        # check neutrals
+        nbNeutral = 0
+        for x in range(WIDTH):
+            for y in range(HEIGHT): 
+                if self.map[x][y] == NEUTRE:
+                    nbNeutral += 1
+
+        if nbNeutral < 10:
+            return
 
         for mine in self.mines: 
             # si on a assez d'argent et que la case est possédée, active et non occupée.
@@ -317,6 +340,28 @@ class Game:
                 self.gold   -= Unit.TRAINING[unit.level]
                 self.income -= Unit.ENTRETIEN[unit.level]
                 self.defensePositions.append(spawnPoint)
+
+        # si on a de la tune pour une tourelle (> 30) et que nos guerriers sont loin des ennemis: 
+        ## COMMENTE CAR FINALEMENT CA CORRESPOND A UN CAS PRECIS ET CA COMPLEXIFIE L'ENSEMBLE
+        # optim tune
+        # if self.gold < 30:
+        #     return
+        
+        # units = Point.sortNearest(self, self.get_my_HQ(), self.OpponentUnits)
+        # for unit in units:
+        #     minDistance = 9999
+        #     for myunit in self.units:
+        #         if distance(myunit,unit) < minDistance: 
+        #             minDistance = distance(myunit,unit)
+            
+        #     if minDistance > distance(unit, self.get_my_HQ()):
+        #         # on construit une tourelle
+        #         points = Point.getAdjacentes(self, unit, self.map, [ACTIVE])
+        #         for point in points:
+        #             self.actions.append(f'BUILD TOWER {point.x} {point.y}')
+        #             self.gold -= 15
+
+
 
     def init(self):
         numberMineSpots = int(input())
@@ -428,6 +473,34 @@ class Game:
         #debugMap(self.defenseMap)
         
 
+    # Construction de tours
+    # COMMENTE car ça compte pas sur les points de victoire
+    def build_towers(self):
+        if self.gold >= 50:
+            # on cherche une case à nous pas loin du QG (dist <= 5)
+            listPoints = []
+            for x in range(WIDTH):
+                for y in range(HEIGHT):
+                    if self.map[x][y] == ACTIVE:
+                        listPoints.append(Point(x, y))
+                        
+            towerCases = Point.sortNearest(self, self.get_opponent_HQ(), listPoints)
+            for case in towerCases:
+                # tune ? 
+                if self.gold < 50:
+                    break
+
+                # check personne dessus
+                taken = False
+                for unit in self.units:
+                    if distance(unit, case) == 0: 
+                        taken = True
+                        break
+
+                if taken == False:
+                    self.actions.append(f'BUILD TOWER {case.x} {case.y}')
+                    self.gold -= 15
+
     # Return false if timeout near and we should stop what we are doing
     def check_timeout(self)-> bool:
         if (time.time()-self.startTime) > 0.05:
@@ -489,6 +562,9 @@ class Game:
         self.build_mines()
         self.train_units()
         self.move_units()
+
+        # il reste de la tune ? on ajoute des tours :)
+        # self.build_towers()
 
 
     def output(self):
