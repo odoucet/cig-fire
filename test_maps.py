@@ -10,6 +10,11 @@ from cig import *
 DRAWZOOM=50
 
 def drawMap(macarte, name, type="map"): 
+
+    # no draw on Travis-CI
+    if os.environ("TRAVIS") == "TRUE":
+        return
+    
     r = Image.new('RGBA', [len(macarte[0])*DRAWZOOM,len(macarte)*DRAWZOOM])
 
     # get a drawing context

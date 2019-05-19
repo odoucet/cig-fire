@@ -3,9 +3,6 @@ import math
 import time
 import copy
 
-# First draft from "starterkit"
-# https://raw.githubusercontent.com/Azkellas/a-code-of-ice-and-fire/develop/src/test/starterkit/starter.py
-
 # MAP SIZE
 WIDTH = 12
 HEIGHT = 12
