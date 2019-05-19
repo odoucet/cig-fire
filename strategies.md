@@ -29,6 +29,13 @@ il faut préférer ça.
 - calculer une carte de distance par rapport au QG ennemi : ça évitera de poser des tourelles nimporte où (plus près != distance())
 
 
+PRIORITE: 
+distanceWalk(p1, p2) qui donne la distance à pied entre deux points, donc ignore les murs et les batiments (sauf si batiment == p1 ou p2)
+
+puis Point.nearestWalk()
+puis Point.sortNearestwalk()
+
+
 TODO
 ====
 J'ai merdé les appels de fonctions Point, qui devraient pas passer tous les arguments mais faire monunite.getAdjacentes(). A réécrire
