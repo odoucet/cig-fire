@@ -12,7 +12,7 @@ HEIGHT = 12
 
 # OWNER
 ME = 0
-opponent = 1
+OPPONENT = 1
 
 # BUILDING TYPE
 HQ = 0
@@ -116,7 +116,7 @@ class Game:
 
     def get_opponent_HQ(self):
         for b in self.OpponentBuildings:
-            if b.type == HQ and b.owner == opponent:
+            if b.type == HQ and b.owner == OPPONENT:
                 return b
 
 
@@ -331,34 +331,43 @@ class Game:
         self.defenseMap = [ [ None for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
         # calcul du moment: on a combien de case à nous ? 
         nbCasesANous = 0
+        nbCasesAdversaire = 0
         
         # on calcule une premiere carte, sur les cases à nous, avec la distance à notre QG
         mapANous = [ [ None for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
         # cleanup: 
         for x in range(WIDTH):
             for y in range(HEIGHT):
+                if self.map[x][y] == ACTIVEOPPONENT:
+                    nbCasesAdversaire += 1
                 if self.map[x][y] != ACTIVE:
                     mapANous[x][y] = None
                 else:
                     nbCasesANous += 1
                     mapANous[x][y] = -1
-
         # si on a pas bcoup de cases en fait on s'en fout, soit c'est trop tôt, soit on est mort
-        #if nbCasesANous < 15:
-        #    return
+        # pareil si on possede toute la carte
+        if nbCasesANous < 15 or nbCasesAdversaire < 1:
+            return
 
         # en itératif on incremente en partant du QG
         aTraiter = [ [self.get_my_HQ(), 0] ]
         debugi = 0
-        while len(aTraiter) > 0 and debugi < 5000:
+        while len(aTraiter) > 0 and debugi < 500:
             debugi += 1
             element, distance = aTraiter.pop(0)
+
+            # si on a deja fait en mieux
+            if mapANous[element.x][element.y] != -1 and mapANous[element.x][element.y] <= distance:
+                continue
+            
             mapANous[element.x][element.y] = distance
+            
             cases = Point.getAdjacentes(self, element, self.map, [ACTIVE])
             for case in cases:
-                if mapANous[case.x][case.y] == -1 or mapANous[case.x][case.y] >= distance+1:
+                if mapANous[case.x][case.y] == -1 or mapANous[case.x][case.y] > distance and [ case, distance + 1] not in aTraiter:
                     aTraiter.append([ case, distance + 1])
-
+        
         # A partir d'ici, on a donc mapANous avec les distances au QG
         self.debugMapANous = mapANous
 
@@ -373,8 +382,10 @@ class Game:
                 if self.map[x][y] == ACTIVE:
                     # si on est trop pres de notre QG ça sert à rien
                     if mapANous[x][y] < 3:
+                        self.defenseMap[x][y] = 0
                         continue
 
+                    timingmapanous = time.time()
                     # la grosse formule commence ici
                     # Etape 1 - on copie la map 
                     # IL FAUT ABSOLUMENT UTILISER DEEPCOPY CAR ON A UN TABLEAU DE TABLEAU!
@@ -386,7 +397,10 @@ class Game:
                     # Puis pour faire ça bien, on fait un calcul récursif en prenant les cases adjacentes
                     aTraiter = Point.getAdjacentes(self, Point(x, y), newMap, [ACTIVE])
                     debugi = 0
-                    while len(aTraiter) > 0 and debugi < 5000:
+                    # TODO: si on a un point super important, cette boucle va mettre une plombe
+                    # soit on la met en cache entre deux rounds, soit on calcule qu'un bout
+                    # on prefere la solution 2 pour le moment
+                    while len(aTraiter) > 0 and debugi < 500:
                         debugi += 1
                         element = aTraiter.pop(0)
                         # si l'element a au moins un voisin inférieur c'est bon, sinon non
@@ -398,8 +412,9 @@ class Game:
                         if keepit is False:
                             newMap[element.x][element.y] = INACTIVE
                             aTraiter.extend(Point.getAdjacentes(self, Point(element.x, element.y), newMap, [ACTIVE]))
-
-
+                    
+                    #sys.stderr.write(f"timing({x},{y}): "+str(round((time.time()-timingmapanous)*1000,1))+"ms / loops: "+str(debugi)+"\n")
+                    
                     # Maintenant on calcule le nbre de cases à nous: 
                     nbCases = 0
                     for tmpx in range(WIDTH):
@@ -407,6 +422,8 @@ class Game:
                             if newMap[tmpx][tmpy] == ACTIVE:
                                 nbCases += 1
                     self.defenseMap[x][y] = abs(nbCasesANous - nbCases)
+
+                    
         debugPythonMap(self.map)
         debugMap(self.defenseMap)
         
