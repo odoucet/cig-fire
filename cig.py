@@ -407,7 +407,9 @@ class Game:
                             if newMap[tmpx][tmpy] == ACTIVE:
                                 nbCases += 1
                     self.defenseMap[x][y] = abs(nbCasesANous - nbCases)
+        debugPythonMap(self.map)
         debugMap(self.defenseMap)
+        
 
     # Return false if timeout near and we should stop what we are doing
     def check_timeout(self)-> bool:
