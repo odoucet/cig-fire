@@ -12,7 +12,7 @@ DRAWZOOM=50
 def drawMap(macarte, name, type="map"): 
 
     # no draw on Travis-CI
-    if os.environ("TRAVIS") == "TRUE":
+    if 'TRAVIS' in os.environ:
         return
     
     r = Image.new('RGBA', [len(macarte[0])*DRAWZOOM,len(macarte)*DRAWZOOM])
