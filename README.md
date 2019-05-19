@@ -1,7 +1,8 @@
 CodInGame - Ice and fire challenge
 ==================================
 
-![Build status](https://api.travis-ci.org/odoucet/cig-fire.svg?branch=master])
+![Build status](https://api.travis-ci.org/odoucet/cig-fire.svg?branch=master)
+https://travis-ci.org/odoucet/cig-fire
 
 Requirements
 ------------
@@ -14,13 +15,14 @@ As stated in Codingame FAQ,we will run under *Python 3.7.2* with :
 
 Build
 -----
-TODO: function to create all-in-one file to be uploaded and tested in CodinGame :)
+Launch __buildcode.py to generate codefinal.py
+Use CGSync to upload codefinal.py to IDE
 
 Integration tests
 -----------------
-Wait for contest to start :)
 https://travis-ci.org/odoucet/cig-fire
 
 Useful addons
 -------------
-https://github.com/Azkellas/cgenhancer
+ * CG Enhancer : https://github.com/Azkellas/cgenhancer
+ * CGSync

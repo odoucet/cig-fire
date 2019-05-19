@@ -1,6 +1,7 @@
 import sys
 import math
 import time
+import copy
 
 # First draft from "starterkit"
 # https://raw.githubusercontent.com/Azkellas/a-code-of-ice-and-fire/develop/src/test/starterkit/starter.py
@@ -326,12 +327,6 @@ class Game:
     # Construction d'une carte avec les points de defense importants chez nous
     # Pour se faire, pour chaque case à nous on calcule notre surface si on la perd
     # On va s'en servir pour mettre des tourelles par exemple
-
-    # TODO: fix bug, tourelle pas au bon endroit => on calcule pas les bons nombres
-    # POUR REPRODUIRE: match contre OAKOS
-    #                  seed=2755259153433054200
-    #                  tour 169 on doit calculer que si on perd (2,5) on perd bcoup, et là queud... 
-    #                  donc erreur dans l'algo
     def calcul_carte_defense(self):
         self.defenseMap = [ [ None for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
         # calcul du moment: on a combien de case à nous ? 
@@ -349,8 +344,8 @@ class Game:
                     mapANous[x][y] = -1
 
         # si on a pas bcoup de cases en fait on s'en fout, soit c'est trop tôt, soit on est mort
-        if nbCasesANous < 15:
-            return
+        #if nbCasesANous < 15:
+        #    return
 
         # en itératif on incremente en partant du QG
         aTraiter = [ [self.get_my_HQ(), 0] ]
@@ -365,18 +360,25 @@ class Game:
                     aTraiter.append([ case, distance + 1])
 
         # A partir d'ici, on a donc mapANous avec les distances au QG
+        self.debugMapANous = mapANous
 
         # on passe maintenant au taff
         for x in range(WIDTH):
             for y in range(HEIGHT): 
+                # on a assez de temps ?
+                if self.check_timeout():
+                    sys.stderr.write("TIMEOUT REACHED in calcul_carte_defense("+str(x)+","+str(y)+") WE EXITED BEFORE DEFENSEMAP COMPLETE\n")
+                    return
+                
                 if self.map[x][y] == ACTIVE:
                     # si on est trop pres de notre QG ça sert à rien
                     if mapANous[x][y] < 3:
                         continue
 
                     # la grosse formule commence ici
-                    # Etape 1 - on copie la map
-                    newMap = self.map.copy()
+                    # Etape 1 - on copie la map 
+                    # IL FAUT ABSOLUMENT UTILISER DEEPCOPY CAR ON A UN TABLEAU DE TABLEAU!
+                    newMap =  copy.deepcopy(self.map)
 
                     # Ensuite on la modifie pour virer la case courante
                     newMap[x][y] = INACTIVE
@@ -397,6 +399,7 @@ class Game:
                             newMap[element.x][element.y] = INACTIVE
                             aTraiter.extend(Point.getAdjacentes(self, Point(element.x, element.y), newMap, [ACTIVE]))
 
+
                     # Maintenant on calcule le nbre de cases à nous: 
                     nbCases = 0
                     for tmpx in range(WIDTH):
@@ -404,9 +407,14 @@ class Game:
                             if newMap[tmpx][tmpy] == ACTIVE:
                                 nbCases += 1
                     self.defenseMap[x][y] = abs(nbCasesANous - nbCases)
-        
-        # On regarde notre carte
-        debugMap(self.defenseMap, debugi)
+        debugMap(self.defenseMap)
+
+    # Return false if timeout near and we should stop what we are doing
+    def check_timeout(self)-> bool:
+        if (time.time()-self.startTime) > 0.05:
+            return True
+        return False 
+
 
     def update(self):
         self.units.clear()
@@ -496,13 +504,5 @@ def debugMap(macarte, loops = 0):
         sys.stderr.write("\n")
     sys.stderr.write("\n")
 
-################################################################
-###### Game launcher ######
-g = Game()
-
-g.init()
-while True:
-    g.update()
-    startTime = time.time()
-    g.build_output()
-    g.output()
+def debugPythonMap(macarte):
+    sys.stderr.write(str(macarte)+"\n")
