@@ -114,11 +114,11 @@ class Game:
         # coordonnées du QG ennemi (cache)
         self.opponentHq = None
 
-    def get_my_HQ(self):
+    def get_my_HQ(self)->Point:
         return self.hq
 
 
-    def get_opponent_HQ(self):
+    def get_opponent_HQ(self)->Point:
         return self.opponentHq
 
 
@@ -178,82 +178,95 @@ class Game:
                 self.actions.append(f'MOVE {unit.id} {destination.x} {destination.y}')
 
     # Stratégie d'entrainement des unites
-    # La règle n'est pas claire: en fait on doit entrainer les unités sur une case vide forcément
-    # et on ne peut pas "upgrader" une unité : il faut la construire avec un gros level directement
+    # Les niveaux > 1 doivent se faire SUR un ennemi histoire de gagner du temps :)
     # TODO: optimiser ces boucles, je suis sûr qu'on fait du taff pour rien
     def train_units(self):
 
         # Strategie: on créé pleins de soldats, et on fait du niveau 2 quand il ne reste que X cases vides
         if len(self.get_points_matching([NEUTRE])) < 30 or len(self.units) >= 10:
 
-            # Olivier: choix de stratégie: on fait que des mecs niveau 3
-            # on spawn au plus proche des troupes ennemies (ça peut être SUR l'ennemi :p)
-            for level in [3]: # ici [3, 2] pour construire des unités de niveau 2 aussi
-                # boucle sur les troupes ennemies
-                ennemis = Point.sortNearest(self, self.get_my_HQ(), self.OpponentUnits)
+            # Boucle 1: est-ce qu'on peut dégommer des niveaux 2 ou 3 en spawnant dessus ?
+            for ennemi in self.OpponentUnits:
+                if ennemi.level < 2:
+                    continue
+                if ennemi.level == 3:
+                    # on considere qu'il est 2 car on va l'écraser avec un 3
+                    ennemi.level = 2
+                
+                if (len(ennemi.getAdjacentes(ennemi, self.map, [ACTIVE])) > 0 and 
+                self.gold >= (Unit.TRAINING[ennemi.level+1]) and self.income >= Unit.ENTRETIEN[ennemi.level+1]):
+                    self.actions.append(f'TRAIN {ennemi.level+1} {ennemi.x} {ennemi.y}')
+                    self.gold   -= Unit.TRAINING[ennemi.level+1]
+                    self.income -= Unit.ENTRETIEN[ennemi.level+1]
+                    self.map[ennemi.x][ennemi.y] = ACTIVE # case prise maintenant :D
+                    # TODO: virer l'ennemi ?
 
-                for caseEnnemi in ennemis:
-                    # si pas de tune ça sert à rien
-                    if self.gold < (Unit.TRAINING[level]) or self.income < Unit.ENTRETIEN[level]:
-                        break
-
-                    # on trouve une case à nous autour ?
-                    casesAutour = Point.getAdjacentes(self, caseEnnemi, self.map, [ACTIVE, NEUTRE])
-                    for case in casesAutour:
-                        if self.map[case.x][case.y] == ACTIVE:
-                            # c'est à nous !
-                            self.actions.append(f'TRAIN {level} {caseEnnemi.x} {caseEnnemi.y}')
-                            self.gold   -= Unit.TRAINING[level]
-                            self.income -= Unit.ENTRETIEN[level]
-                            self.map[caseEnnemi.x][caseEnnemi.y] = ACTIVE # case prise maintenant
-                            break
-                        else:
-                            taken = False
-                            for unit in self.units:
-                                if distance(unit, case) == 0: 
-                                    taken = True
-                                    break
-                            
-                            if taken == False:
-                                self.actions.append(f'TRAIN {level} {case.x} {case.y}')
-                                self.gold   -= Unit.TRAINING[level]
-                                self.income -= Unit.ENTRETIEN[level]
-                                self.map[case.x][case.y] = ACTIVE # case prise maintenant
-                                break
-
-        else: 
+            # Boucle 2: est-ce qu'on peut dégommer un niveau 1 en spawnant un 2 dessus ? 
+            for ennemi in self.OpponentUnits:
+                if ennemi.level > 1:
+                    continue
+                
+                if (len(ennemi.getAdjacentes(ennemi, self.map, [ACTIVE])) > 0 and 
+                self.gold >= (Unit.TRAINING[ennemi.level+1]) and self.income >= Unit.ENTRETIEN[ennemi.level+1]):
+                    self.actions.append(f'TRAIN {ennemi.level+1} {ennemi.x} {ennemi.y}')
+                    self.gold   -= Unit.TRAINING[ennemi.level+1]
+                    self.income -= Unit.ENTRETIEN[ennemi.level+1]
+                    self.map[ennemi.x][ennemi.y] = ACTIVE # case prise maintenant :D
+                    # TODO: virer l'ennemi ?
+            
+        else:
+            # on garde l'algo (pas terrible) qu'on a déjà, pour le moment
             casesANous = self.get_points_matching([ACTIVE])
             casesSpawn = []
 
-            # On ajoute à ces cases là les inactives / neutres 
+            # Premier tour
+            if len(casesANous) == 1:
+                if (self.map[0][0] == ACTIVE):
+                    casesSpawn.extend([Point(1,0), Point(0,1)])
+                else:
+                    casesSpawn.extend([Point(10,11), Point(11,10)])
+
+            # On ajoute à ces cases là les inactives / neutres / ennemi
             for case in casesANous:
-                # TODO: on peut optimiser en spawnant sur des cases actives de l'ennemi ? A tester
-                casesSpawn.extend(Point.getAdjacentes(self, case, self.map, [INACTIVE, INACTIVEOPPONENT, NEUTRE]))
+                # on peut optimiser en spawnant sur des cases actives de l'ennemi ? A tester
+                casesSpawn.extend(Point.getAdjacentes(self, case, self.map, [INACTIVE, INACTIVEOPPONENT, ACTIVEOPPONENT, NEUTRE]))
 
             # et on deduplique
-            casesSpawn = list(dict.fromkeys(casesSpawn))
+            casesSpawn = Point.sortNearest(self, self.get_opponent_HQ(), list(dict.fromkeys(casesSpawn)))
 
             # ici on entraine que du niveau 1
-            while self.gold >= Unit.TRAINING[1] and self.income >= Unit.ENTRETIEN[1]:
+            while len(casesSpawn) > 0 and self.gold >= Unit.TRAINING[1] and self.income >= Unit.ENTRETIEN[1]:
                 # on entraine sur une case à nous, la plus proche du QG adverse
-                
-                # pour le premier tour il faut ajouter les voisins ...
-                if len(casesANous) == 1:
-                    if (self.map[0][0] == ACTIVE):
-                        casesSpawn.extend([Point(1,0), Point(0,1)])
-                    else:
-                        casesSpawn.extend([Point(10,11), Point(11,10)])
+                case = casesSpawn.pop(0)
 
-                case = Point.nearest(self, self.get_opponent_HQ(), casesSpawn)
-                if case is not None:
-                    self.actions.append(f'TRAIN 1 {case.x} {case.y}')
-                    self.income -= Unit.ENTRETIEN[1]
-                    self.gold   -= Unit.TRAINING[1]
-                    self.map[case.x][case.y] = ACTIVE # case prise maintenant
-                    # la case va etre prise donc on ne la considere plus
-                    casesSpawn.remove(case)
-                else:
-                    break
+                # check personne, pas de batiment
+                # TODO: y'a surement moyen d'optimiser ça ... avec une carte des trucs sur la carte ? 
+                skip = False
+                for ennemi in self.OpponentUnits:
+                    if ennemi.x == case.x and ennemi.y == case.y:
+                        skip = True
+                        break
+                for ami in self.units:
+                    if ami.x == case.x and ami.y == case.y:
+                        skip = True
+                        break
+
+                for building in self.buildings:
+                    if building.x == case.x and building.y == case.y:
+                        skip = True
+                        break
+                for building in self.OpponentBuildings:
+                    if building.x == case.x and building.y == case.y:
+                        skip = True
+                        break
+
+                if skip == True:
+                    continue
+                
+                self.actions.append(f'TRAIN 1 {case.x} {case.y}')
+                self.income -= Unit.ENTRETIEN[1]
+                self.gold   -= Unit.TRAINING[1]
+                self.map[case.x][case.y] = ACTIVE # case prise maintenant
 
     # Construction des mines
     # Seulement si on est en expansion de territoire, donc qu'il reste bcoup de NEUTRAL
