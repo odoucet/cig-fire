@@ -24,6 +24,8 @@ INACTIVE = "o"
 ACTIVEOPPONENT = "X"
 INACTIVEOPPONENT = "x"
 
+# On met notre distanceMap en global pour simplifier le code ... et désolé c'est dégueu :(
+distanceMap = [ [ None for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
 
 class Point:
     def __init__(self, x: int, y: int):
@@ -51,13 +53,14 @@ class Point:
 
 
     # Retourne les cases adjacentes, avec un filtre 
-    def getAdjacentes(self, point, map, filtre):
+    def getAdjacentes(self, point, map, filtre = None):
         cases = []
         #                 gauche                   droite                 haut                    bas
         combinaisons = [ [point.x-1, point.y], [point.x+1, point.y], [point.x, point.y-1], [point.x, point.y+1]]
         for x,y in combinaisons:
-            if x >= 0 and x < WIDTH and y >= 0 and y < HEIGHT and map[x][y] in filtre:
-                cases.append(Point(x, y))
+            if x >= 0 and x < WIDTH and y >= 0 and y < HEIGHT:
+                if filtre is None or map[x][y] in filtre:
+                    cases.append(Point(x, y))
         return cases
 
 
@@ -103,19 +106,20 @@ class Game:
         # les positions de defenses, avec des unites dedans à ne pas toucher
         self.defensePositions = []
 
-        # init selfmap
+        # init carte du jeu
         self.map = [ [ None for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
 
+        # coordonnées de notre QG (cache)
+        self.hq = None
+        # coordonnées du QG ennemi (cache)
+        self.opponentHq = None
+
     def get_my_HQ(self):
-        for b in self.buildings:
-            if b.type == HQ and b.owner == ME:
-                return b
+        return self.hq
 
 
     def get_opponent_HQ(self):
-        for b in self.OpponentBuildings:
-            if b.type == HQ and b.owner == OPPONENT:
-                return b
+        return self.opponentHq
 
 
     # Recupere toutes les cases qui respectent le type demandé
@@ -359,7 +363,7 @@ class Game:
         #             self.gold -= 15
 
 
-
+    # Debug du jeu !
     def init(self):
         numberMineSpots = int(input())
         for _ in range(numberMineSpots):
@@ -372,47 +376,12 @@ class Game:
     # On va s'en servir pour mettre des tourelles par exemple
     def calcul_carte_defense(self):
         self.defenseMap = [ [ None for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
-        # calcul du moment: on a combien de case à nous ? 
-        nbCasesANous = 0
-        nbCasesAdversaire = 0
-        
-        # on calcule une premiere carte, sur les cases à nous, avec la distance à notre QG
-        mapANous = [ [ None for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
-        # cleanup: 
-        for x in range(WIDTH):
-            for y in range(HEIGHT):
-                if self.map[x][y] == ACTIVEOPPONENT:
-                    nbCasesAdversaire += 1
-                if self.map[x][y] != ACTIVE:
-                    mapANous[x][y] = None
-                else:
-                    nbCasesANous += 1
-                    mapANous[x][y] = -1
+
         # si on a pas bcoup de cases en fait on s'en fout, soit c'est trop tôt, soit on est mort
         # pareil si on possede toute la carte
-        if nbCasesANous < 15 or nbCasesAdversaire < 15:
+        nbCasesANous = len(self.get_points_matching([ACTIVE]))
+        if nbCasesANous < 15 or len(self.get_points_matching([ACTIVEOPPONENT])) < 15:
             return
-
-        # en itératif on incremente en partant du QG
-        aTraiter = [ [self.get_my_HQ(), 0] ]
-        debugi = 0
-        while len(aTraiter) > 0 and debugi < 500:
-            debugi += 1
-            element, distance = aTraiter.pop(0)
-
-            # si on a deja fait en mieux
-            if mapANous[element.x][element.y] != -1 and mapANous[element.x][element.y] <= distance:
-                continue
-            
-            mapANous[element.x][element.y] = distance
-            
-            cases = Point.getAdjacentes(self, element, self.map, [ACTIVE])
-            for case in cases:
-                if mapANous[case.x][case.y] == -1 or mapANous[case.x][case.y] > distance and [ case, distance + 1] not in aTraiter:
-                    aTraiter.append([ case, distance + 1])
-        
-        # A partir d'ici, on a donc mapANous avec les distances au QG
-        self.debugMapANous = mapANous
 
         # on passe maintenant au taff
         for x in range(WIDTH):
@@ -424,11 +393,9 @@ class Game:
                 
                 if self.map[x][y] == ACTIVE:
                     # si on est trop pres de notre QG ça sert à rien
-                    if mapANous[x][y] < 3:
+                    if distance(Point(x,y), self.get_my_HQ()) < 3:
                         self.defenseMap[x][y] = 0
                         continue
-
-                    timingmapanous = time.time()
 
                     # la grosse formule commence ici
                     # Etape 1 - on copie la map 
@@ -533,8 +500,12 @@ class Game:
                 self.buildings.append(Building(owner, building_type, x, y))
                 if building_type == MINE:
                     self.nbMinesDuJoueur += 1
+                elif building_type == HQ:
+                    self.hq = Point(x, y)
             else:
                 self.OpponentBuildings.append(Building(owner, building_type, x, y))
+                if building_type == HQ:
+                    self.opponentHq = Point(x, y)
 
         unit_count = int(input())
         for _ in range(unit_count):
@@ -549,6 +520,18 @@ class Game:
                 self.units.append(obj)
             else:
                 self.OpponentUnits.append(Unit(owner, unit_id, level, x, y))
+
+        # Cartes des distances.
+        # techniquement, pour le pathfinding il faudrait calculer la carte des distances pour chaque point possible.
+        # et bah en fait c'est exactement ce qu'on va faire car ça calcule super vite et qu'on a une seconde sur ce run !
+        # et on réintegre la fonction distance() qui se basera dessus (juste aller chercher des coordonnées au bon endroit)
+        # NOTE: distanceMap est une variable *GLOBALE* (oui c'est mal)
+        if distanceMap[0][0] is None:
+            p = Pathfinding()
+            for x in range(WIDTH):
+                for y in range(HEIGHT):
+                    if self.map[x][y] != NEANT:
+                        distanceMap[x][y] = p.buildDistanceMap(self.map, Point(x, y))
 
 
     def build_output(self):
@@ -575,14 +558,48 @@ class Game:
     def getTotalTime(self)-> int:
         return round((time.time() - self.startTime)*1000)
 
-# calcule la distance entre deux cases. Hyper utilise donc mis en global
-def distance(f, t) -> float:
-    # optimisation si mm point:
-    if f.x == t.x and f.y == t.y:
-        return 0
 
-    # On peut pas aller en diagonale donc en fait c'est simple
-    return abs(f.x - t.x)+abs(f.y - t.y)
+
+class Pathfinding:
+    # construit une carte des distances basé sur macarte, par rapport à position.
+    # on la veut générique, donc si position n'est pas un angle faut que ça marche quand même.
+    # argument facultatif: maxDist pour calculer qu'un bout de la carte
+    def buildDistanceMap(self, macarte, position, murs = [NEANT], maxDist = 99):
+        tmpcarte = [ [ None for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
+        
+        # en itératif on incremente en partant du QG
+        aTraiter = [ [position, 0] ]
+        debugi = 0
+        while len(aTraiter) > 0 and debugi < 500:
+            debugi += 1
+            element, distance = aTraiter.pop(0)
+
+            # si on a deja fait en mieux
+            if tmpcarte[element.x][element.y] is not None and tmpcarte[element.x][element.y] <= distance:
+                continue
+            
+            tmpcarte[element.x][element.y] = distance
+
+            # si distance max atteinte, on quitte
+            if (distance >= maxDist):
+                continue
+            
+            cases = Point.getAdjacentes(self, element, macarte)
+            for case in cases:
+                # si c'est un mur on passe: 
+                if macarte[case.x][case.y] in murs:
+                    continue
+                
+                if tmpcarte[case.x][case.y] is None or tmpcarte[case.x][case.y] > distance and [ case, distance + 1] not in aTraiter:
+                    aTraiter.append([ case, distance + 1])
+        
+        return tmpcarte
+        
+# calcule la distance entre deux cases. Hyper utilise donc mis en global
+# On peut pas aller en diagonale donc en fait c'est simple
+# on utilise la distanceMap de f et on cherche la valeur de t
+def distance(f, t) -> float:
+    return distanceMap[f.x][f.y][t.x][t.y]
 
 
 def debugMap(macarte, loops = 0):

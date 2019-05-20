@@ -9,7 +9,7 @@ from cig import *
 ## Draw
 DRAWZOOM=50
 
-def drawMap(macarte, name, type="map"): 
+def drawMap(macarte, name, type="map", texte=None): 
 
     # no draw on Travis-CI
     if 'TRAVIS' in os.environ:
@@ -56,6 +56,9 @@ def drawMap(macarte, name, type="map"):
         d.line([(0, x*DRAWZOOM), (DRAWZOOM*len(macarte), x*DRAWZOOM)], fill=(0,0,0))
     d.line([(len(macarte)*DRAWZOOM-1, 0), (len(macarte)*DRAWZOOM-1, DRAWZOOM*len(macarte)-1)], fill=(0,0,0))
     d.line([(0, len(macarte)*DRAWZOOM-1), (DRAWZOOM*len(macarte)-1, len(macarte)*DRAWZOOM-1)], fill=(0,0,0))
+
+    if texte is not None:
+        d.text([10, len(macarte)*DRAWZOOM-10], texte, font=legend, fill=(0,0,0))
 
     r.save('tests/'+name+'.png', 'PNG')
 ## end raw
@@ -159,3 +162,75 @@ def test_map_cas3():
     drawMap(g.defenseMap, "defensemap","defmap")
     assert g.defenseMap[2][2] is not None and g.defenseMap[2][2] > 10
     assert g.defenseMap[2][6] is not None and g.defenseMap[2][6] == 1
+
+
+### Distances ###
+def test_algo_distance1(): 
+    g = Pathfinding()
+    
+    # attention, carte "inversée" visuellement ici 
+    macarte = [
+        ['O', 'O', 'O', '#', '#', '#', 'O', 'O', 'O', 'O', 'O', '#'], 
+        ['O', 'O', 'O', '#', '#', 'O', 'O', 'O', 'O', 'O', 'O', 'O'], 
+        ['O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O'], 
+        ['#', '#', 'O', 'O', 'X', 'X', 'X', 'O', 'O', 'O', 'O', 'O'], 
+        ['#', 'O', 'O', 'O', 'O', 'X', 'X', 'X', 'O', 'O', 'O', 'O'], 
+        ['O', 'O', 'O', 'X', 'O', 'O', 'X', 'X', 'O', 'O', 'O', 'O'], 
+        ['O', 'O', 'X', 'X', 'O', 'X', 'X', 'X', 'X', 'O', 'O', 'O'], 
+        ['O', 'O', 'O', 'X', 'X', 'X', '.', 'X', 'X', 'O', '.', '#'], 
+        ['O', '.', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', '#', '#'], 
+        ['.', '.', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', '.'], 
+        ['.', '.', 'X', 'X', 'X', 'X', 'X', '#', '#', 'X', 'X', 'X'], 
+        ['#', '.', '.', '.', 'X', '.', '#', '#', '#', 'X', 'X', 'X']]
+
+    drawMap(macarte, "mapdistance")
+
+    g.startTime = time.time()
+    distanceMap= g.buildDistanceMap(macarte, Point(0, 0))
+    drawMap(distanceMap, "distancemap1","defmap", "Temps de construction: "+str(time.time()-g.startTime))
+    assert distanceMap[3][0] is None
+    assert distanceMap[2][2] is not None and distanceMap[2][2] == 4
+    assert distanceMap[2][6] is not None and distanceMap[11][9] == 20
+
+    # Autre cas avec la même carte : départ au milieu ! 
+    g.startTime = time.time()
+    distanceMap= g.buildDistanceMap(macarte, Point(5, 5))
+    drawMap(distanceMap, "distancemap2","defmap", "Temps de construction: "+str(time.time()-g.startTime))
+    assert distanceMap[11][7] is None
+    assert distanceMap[2][2] is not None and distanceMap[2][2] == 6
+    assert distanceMap[2][6] is not None and distanceMap[11][9] == 10
+
+def test_algo_distance2(): 
+    g = Pathfinding()
+    
+    # attention, carte "inversée" visuellement ici 
+    macarte = [
+        ['O', 'O', 'O', '#', '#', '#', 'O', 'O', 'O', 'O', 'O', '#'], 
+        ['O', 'O', 'O', '#', '#', 'O', 'O', 'O', 'O', 'O', 'O', 'O'], 
+        ['O', 'O', 'O', 'O', '#', 'O', 'O', 'O', 'O', 'O', 'O', 'O'], 
+        ['#', '#', 'O', 'O', '#', 'X', 'X', 'O', 'O', 'O', 'O', 'O'], 
+        ['#', 'O', 'O', 'O', '#', 'X', '#', 'X', 'O', 'O', 'O', 'O'], 
+        ['O', 'O', 'O', 'X', 'O', 'O', '#', 'X', 'O', 'O', 'O', 'O'], 
+        ['O', 'O', 'X', 'X', 'O', 'X', '#', 'X', 'X', 'O', 'O', 'O'], 
+        ['O', 'O', 'O', '#', 'X', 'X', '#', 'X', 'X', 'O', '.', '#'], 
+        ['O', '.', 'X', '#', 'X', 'X', '#', 'X', 'X', 'X', '#', '#'], 
+        ['.', '.', 'X', '#', 'X', 'X', 'X', 'X', 'X', 'X', 'X', '.'], 
+        ['.', '.', 'X', '#', 'X', 'X', 'X', '#', '#', 'X', 'X', 'X'], 
+        ['#', '.', '.', '#', 'X', '.', '#', '#', '#', 'X', 'X', 'X']]
+
+    drawMap(macarte, "mapdistance")
+
+    startTime = time.time()
+    distanceMap= g.buildDistanceMap(macarte, Point(0, 0))
+    drawMap(distanceMap, "distancemap3","defmap", "Temps de construction: "+str(time.time()-startTime))
+    assert distanceMap[4][4] is None
+    assert distanceMap[2][2] is not None and distanceMap[8][7] == 17
+    assert distanceMap[9][9] is not None and distanceMap[9][9] == 18
+
+    # Autre cas avec la même carte : départ au milieu ! 
+    startTime = time.time()
+    distanceMap= g.buildDistanceMap(macarte, Point(5, 5))
+    drawMap(distanceMap, "distancemap4","defmap", "Temps de construction: "+str(time.time()-startTime))
+    assert distanceMap[10][8] is None
+    assert distanceMap[0][2] is not None and distanceMap[0][2] == 8
+    assert distanceMap[5][7] is not None and distanceMap[5][7] == 6

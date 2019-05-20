@@ -26,8 +26,10 @@ il faut préférer ça.
     * faire un round avec juste les cases adjacentes, et calculer si y'a un truc intéressant => override
     * sinon algo actuel
 
-- calculer une carte de distance par rapport au QG ennemi : ça évitera de poser des tourelles nimporte où (plus près != distance())
-
+*************
+Optim calcul_defense_map: au lieu de faire par x,y on le fait par distance à notre QG : comme ça si on s'arrête, au moins on a fait les trucs utiles.
++ si on a un building sur une case on calcule pas (on pourra rien poser dessus)
+             idem pour un bâtiment ? => veut dire que defense_map ne servira que pour des tourelles ...
 
 PRIORITE: 
 distanceWalk(p1, p2) qui donne la distance à pied entre deux points, donc ignore les murs et les batiments (sauf si batiment == p1 ou p2)
