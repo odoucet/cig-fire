@@ -26,6 +26,15 @@ il faut préférer ça.
     * faire un round avec juste les cases adjacentes, et calculer si y'a un truc intéressant => override
     * sinon algo actuel
 
+- faire une carte des cibles à point, pour simplifier où on va : 
+   * les mines adverses
+   * les adversaires qu'on peut battre (dépend de qui on est)
+   * les cases importantes pour l'ennemi (comme notre defense_map, mais pour l'ennemi)
+       => on construit que celles à portée de notre zone ? on ira pas capturer une tile à l'autre bout de la map :)
+
+- comme on peut spawn pleins d'unites 1 et que ça vole une case, on calcule si on peut faire des horizontal/vertical avec ça et couper BEAUCOUP de territoire ennemi :)
+  => simuler le coup facile, mais leterritoire perdu c'est un peu long :(
+                                 => juste ignorer les cases plus à droite/gauche/haut/bas pour simplfiier ? super simple alors !
 *************
 Optim calcul_defense_map: au lieu de faire par x,y on le fait par distance à notre QG : comme ça si on s'arrête, au moins on a fait les trucs utiles.
 + si on a un building sur une case on calcule pas (on pourra rien poser dessus)
