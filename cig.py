@@ -257,6 +257,7 @@ class Game:
                     self.income -= Unit.ENTRETIEN[1]
                     self.gold   -= Unit.TRAINING[1]
                     self.map[case.x][case.y] = ACTIVE # case prise maintenant donc on peut spawn les adjacentes :)
+                    
                     casesSpawn.extend(case.getAdjacentes(self.map, [INACTIVE, INACTIVEOPPONENT, ACTIVEOPPONENT, NEUTRE]))
                     casesSpawn = self.get_opponent_HQ().sortNearest(list(dict.fromkeys(casesSpawn)))
 
@@ -290,15 +291,41 @@ class Game:
     # Top priorité : protéger la base, en spawnant un soldat de niveau suffisant sur la ligne de combat d'une unité adverse
     # TODO: on peut mieux faire ici, et avoir des tourelles à de meilleurs endroits
     def protect_base(self):
+        
+        # J'aime l'idée de mettre une tourelle en 2,2 ou 9,9 si l'ennemi se rapproche, pour éviter les "rush" comme
+        # certains joueurs le font.
+        # On essaie ça : si 3 adversaires sont à une distance <= 6, on pause la tourelle
+        nbAdversairesProche = 0
+        for unit in self.OpponentUnits:
+            if distance(unit, self.get_my_HQ()) <= 6:
+                nbAdversairesProche += 1
+        
+        #a reecrire mieux:
+        if nbAdversairesProche >= 3:
+            poserTourelle = True
+            if self.get_my_HQ().x == 0:
+                positionTourelle = Point(2, 2)
+            else:
+                positionTourelle = Point(9, 9)
+            
+            for building in self.buildings:
+                if building.type == TOWER and building.x == positionTourelle.x and building.y == positionTourelle.y:
+                    poserTourelle = False
+                    break
+            if poserTourelle:
+                self.actions.append(f'BUILD TOWER {positionTourelle.x} {positionTourelle.y}')
+                self.gold -= 15
+                self.buildings.append(Building(ME, TOWER, positionTourelle.x, positionTourelle.y))
+
 
         # On essaie d'avoir des tourelles sur les super points (defenseMap >= 20)
         for x in range(WIDTH):
             for y in range(HEIGHT): 
                 if self.defenseMap[x][y] is not None and self.defenseMap[x][y] >= 20:
-                    # on check qu'on a pas deja une tour
+                    # on check qu'on a pas deja une tour dessus ou à coté
                     built = False
                     for building in self.buildings:
-                        if building.type == TOWER and distance(building, Point(x, y)) == 0:
+                        if building.type == TOWER and distance(building, Point(x, y)) <= 1:
                             built = True
                             break
                     # et pas sur une mine
@@ -309,13 +336,14 @@ class Game:
                     if built == False and self.gold > 15:
                         self.actions.append(f'BUILD TOWER {x} {y}')
                         self.gold -= 15
+                        self.buildings.append(Building(ME, TOWER, x, y))
                         #todo: marquer case occupée
 
 
         # Sauvegarde de de la dernière chance : on spawn des unités au porte de notre base: 
         # on se focalise sur les unités ennemies les plus proches
         for unit in self.get_my_HQ().sortNearest(self.OpponentUnits): 
-            if distance(unit, self.get_my_HQ()) >= 3:
+            if distance(unit, self.get_my_HQ()) > 3:
                 break
             
             # par quel côté ?
@@ -332,9 +360,12 @@ class Game:
             
             # pas de verif de tune,c'est une question de vie ou de mort
             for spawnPoint in spawnPoints: 
-                self.actions.append(f'TRAIN {unit.level} {spawnPoint.x} {spawnPoint.y}')
-                self.gold   -= Unit.TRAINING[unit.level]
-                self.income -= Unit.ENTRETIEN[unit.level]
+                # on spawn un level superieur
+                if unit.level == 3:
+                    unit.level = 2 # on fait style, on va spawn un level+1
+                self.actions.append(f'TRAIN {unit.level+1} {spawnPoint.x} {spawnPoint.y}')
+                self.gold   -= Unit.TRAINING[unit.level+1]
+                self.income -= Unit.ENTRETIEN[unit.level+1]
                 self.defensePositions.append(spawnPoint)
 
 
@@ -367,6 +398,19 @@ class Game:
                     sys.stderr.write("TIMEOUT REACHED in calcul_carte_defense("+str(x)+","+str(y)+") WE EXITED BEFORE DEFENSEMAP COMPLETE\n")
                     return
                 
+                # on peut sauter la case si on a déjà une tour dessus ou à une distance de 1
+                # TODO: reecrire ça mieux ...
+                if Point(x, y) in self.buildings:
+                    continue
+                skip = False
+                for point in Point(x,y).getAdjacentes(self.map):
+                    if point.x == x and point.y == y:
+                        skip = True
+                        break
+                if skip:
+                    continue
+
+                # pas de raison de pas calculer pour cette case ...
                 if self.map[x][y] == ACTIVE:
                     # si on est trop pres de notre QG ça sert à rien
                     if distance(Point(x,y), self.get_my_HQ()) < 3:
@@ -418,7 +462,7 @@ class Game:
         if self.gold < 50:
             return
 
-        # on cherche une case à nous pas loin du QG (dist <= 5)
+        # on cherche une case à nous pas loin du QG ennemi (dist <= 5)
         towerCases = self.get_opponent_HQ().sortNearest( self.get_points_matching([ACTIVE]) )
         for case in towerCases:
             # tune ? 
