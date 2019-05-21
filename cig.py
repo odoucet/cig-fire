@@ -297,7 +297,7 @@ class Game:
         # On essaie ça : si 3 adversaires sont à une distance <= 6, on pause la tourelle
         nbAdversairesProche = 0
         for unit in self.OpponentUnits:
-            if distance(unit, self.get_my_HQ()) <= 6:
+            if distance(unit, self.get_my_HQ()) <= 8:
                 nbAdversairesProche += 1
         
         #a reecrire mieux:
@@ -318,10 +318,10 @@ class Game:
                 self.buildings.append(Building(ME, TOWER, positionTourelle.x, positionTourelle.y))
 
 
-        # On essaie d'avoir des tourelles sur les super points (defenseMap >= 20)
+        # On essaie d'avoir des tourelles sur les super points (defenseMap >= 7)
         for x in range(WIDTH):
             for y in range(HEIGHT): 
-                if self.defenseMap[x][y] is not None and self.defenseMap[x][y] >= 20:
+                if self.defenseMap[x][y] is not None and self.defenseMap[x][y] >= 7:
                     # on check qu'on a pas deja une tour dessus ou à coté
                     built = False
                     for building in self.buildings:
