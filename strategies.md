@@ -40,11 +40,8 @@ Optim calcul_defense_map: au lieu de faire par x,y on le fait par distance à no
 + si on a un building sur une case on calcule pas (on pourra rien poser dessus)
              idem pour un bâtiment ? => veut dire que defense_map ne servira que pour des tourelles ...
 
-PRIORITE: 
-distanceWalk(p1, p2) qui donne la distance à pied entre deux points, donc ignore les murs et les batiments (sauf si batiment == p1 ou p2)
-
-puis Point.nearestWalk()
-puis Point.sortNearestwalk()
+*************
+Là on essaie tjs d'aller sur des cases protégées par une tour, donc ça marche pas.
 
 
 TODO

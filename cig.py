@@ -147,14 +147,17 @@ class Game:
             if unit.doNotMove == True:
                 continue
 
-            # Strategie Olivier: si niveau 3, on fonce sur l'adversaire le plus proche
+            # Strategie Olivier: si niveau 3, on fonce sur l'adversaire / la tour / le batiment MINE le plus proche
             if unit.level == 3:
                 if not self.OpponentUnits: 
                     # on va sur la base ennemi
                     destination = self.get_opponent_HQ()
                 else:
-                    # on va taper de l'unité ennemie
-                    destination = unit.nearest(self.OpponentUnits)
+                    # on va taper de l'unité / du batiment ennemi
+                    # TODO: on peut optimiser ici car le QG est forcément un building ennemi
+                    tmpEnnemi = self.OpponentUnits.copy()
+                    tmpEnnemi.extend(self.OpponentBuildings)
+                    destination = unit.nearest(tmpEnnemi)
 
                 self.actions.append(f'MOVE {unit.id} {destination.x} {destination.y}')
                 unit.x = destination.x
@@ -189,20 +192,33 @@ class Game:
                     # on considere qu'il est 2 car on va l'écraser avec un 3
                     ennemi.level = 2
                 
-                if (len(ennemi.getAdjacentes(ennemi, self.map, [ACTIVE])) > 0 and 
+                if (len(ennemi.getAdjacentes(self.map, [ACTIVE])) > 0 and 
                 self.gold >= (Unit.TRAINING[ennemi.level+1]) and self.income >= Unit.ENTRETIEN[ennemi.level+1]):
                     self.actions.append(f'TRAIN {ennemi.level+1} {ennemi.x} {ennemi.y}')
                     self.gold   -= Unit.TRAINING[ennemi.level+1]
                     self.income -= Unit.ENTRETIEN[ennemi.level+1]
                     self.map[ennemi.x][ennemi.y] = ACTIVE # case prise maintenant :D
                     self.OpponentUnits.remove(ennemi) # on vire l'ennemi
+            
+            # Boucle 2 : est-ce qu'on peut dégommer une TOUR ennemies en spawnant un niveau 3 dessus ? ^^
+            for ennemi in self.OpponentBuildings:
+                if ennemi.type != TOWER:
+                    continue
+                
+                if (len(ennemi.getAdjacentes(self.map, [ACTIVE])) > 0 and 
+                self.gold >= (Unit.TRAINING[3]) and self.income >= Unit.ENTRETIEN[3]):
+                    self.actions.append(f'TRAIN 3 {ennemi.x} {ennemi.y}')
+                    self.gold   -= Unit.TRAINING[3]
+                    self.income -= Unit.ENTRETIEN[3]
+                    self.map[ennemi.x][ennemi.y] = ACTIVE # case prise maintenant :D
+                    self.OpponentBuildings.remove(ennemi) # on vire l'ennemi
 
-            # Boucle 2: est-ce qu'on peut dégommer un niveau 1 en spawnant un 2 dessus ? 
+            # Boucle 4: est-ce qu'on peut dégommer un niveau 1 en spawnant un 2 dessus ? 
             for ennemi in self.OpponentUnits:
                 if ennemi.level > 1:
                     continue
                 
-                if (len(ennemi.getAdjacentes(ennemi, self.map, [ACTIVE])) > 0 and 
+                if (len(ennemi.getAdjacentes(self.map, [ACTIVE])) > 0 and 
                 self.gold >= (Unit.TRAINING[ennemi.level+1]) and self.income >= Unit.ENTRETIEN[ennemi.level+1]):
                     self.actions.append(f'TRAIN {ennemi.level+1} {ennemi.x} {ennemi.y}')
                     self.gold   -= Unit.TRAINING[ennemi.level+1]
@@ -249,8 +265,9 @@ class Game:
     # Il faut que la mine nous appartienne (case ACTIVE), avec personne dessus
     # et d'un point de vue économique on en veut pas plus d'une d'avance sur l'ennemi (sauf si max tunes)
     def build_mines(self):
-        # check neutrals
-        if len(self.get_points_matching([NEUTRE])) < 10:
+        
+        # on pause pas de mines si reste peu de points à prendre sur la carte (sauf si max tune)
+        if len(self.get_points_matching([NEUTRE])) < 10 and self.gold < 150+(20+4*self.nbMines):
             return
 
         # d'un point de vue économique on en veut pas plus d'une d'avance sur l'ennemi (sauf si max tunes)
@@ -507,10 +524,12 @@ class Game:
     def build_output(self):
         self.calcul_carte_defense()
 
+        self.move_units()
+
         self.protect_base()
         self.build_mines()
         self.train_units()
-        self.move_units()
+        
 
         # il reste de la tune ? on ajoute des tours :)
         self.build_towers()
