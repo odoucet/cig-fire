@@ -295,8 +295,12 @@ def test_algo_capture_directe2():
         ['#', '.', '.', '#', 'X', '.', '#', '#', '#', '#', 'X', 'X']]
     # on va avoir besoin des bâtiments et unités ennemies: 
     # test2: on rajoute un niveau 1 sur le chemin
+    g.units.append(Unit(ME, 1, 1, 8, 9))
     g.OpponentUnits.append(Unit(OPPONENT, 1, 1, 10, 10))
-
+    g.hq = Point(0, 0)
+    g.opponentHq = Point(11,11)
+    g.calcul_distance_map()
+    
     g.gold = 70
     g.income = 1 # doit pas jouer
     drawMap(g.map, "cd2-map")

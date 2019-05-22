@@ -415,8 +415,10 @@ class Game:
             # on peut sauter la case si on a déjà une tour dessus ou à une distance de 1
             # TODO: reecrire ça mieux ...
             if currentCase in self.buildings:
+                self.defenseMap[currentCase.x][currentCase.y] = 0
                 continue
             
+            # on regarde si la case est déjà couverte par une tour
             skip = False
             for point in currentCase.getAdjacentes(self.map):
                 for building in self.buildings:
@@ -424,6 +426,25 @@ class Game:
                         skip = True
                         break
             if skip:
+                self.defenseMap[currentCase.x][currentCase.y] = 0
+                continue
+
+            # On regarde maintenant si TOUTES les cartes autour de nous sont à nous ou neutres. Si oui, on peut sauter
+            nbCasesANous = 0
+            for x in range(currentCase.x-1, currentCase.x+2):
+                for y in range(currentCase.y-1, currentCase.y+2):
+                    if x >= 0 and x <= WIDTH and y >= 0 and y <= HEIGHT:
+                        if self.map[x][y] in [ACTIVE, NEUTRE, NEANT]:
+                            nbCasesANous += 1
+                    else:
+                        # pas dans la carte == bon qd mm :p
+                        nbCasesANous += 1
+
+            if currentCase.x == 4 and currentCase.y == 2:
+                sys.stderr.write(f"Sortie (4,2): {nbCasesANous}")
+
+            if nbCasesANous == 9:
+                self.defenseMap[currentCase.x][currentCase.y] = 0
                 continue
 
             # si on est trop pres de notre QG ça sert à rien
@@ -431,6 +452,7 @@ class Game:
                 self.defenseMap[currentCase.x][currentCase.y] = 0
                 continue
 
+            
             # la grosse formule commence ici
             # Etape 1 - on copie la map 
             # IL FAUT ABSOLUMENT UTILISER DEEPCOPY CAR ON A UN TABLEAU DE TABLEAU!
@@ -443,7 +465,7 @@ class Game:
             # Ici on recalcule une nouvelle carte, en partant de notre base. Donc plus on est loin, plus c'est "cher"
             aTraiter = [ self.get_my_HQ()  ]
             debugi = 0
-            while len(aTraiter) > 0 and debugi < 100: # on calcule pas trop loin
+            while len(aTraiter) > 0 and debugi < 500: # on calcule pas trop loin
                 debugi += 1
                 element = aTraiter.pop(0)
 
@@ -637,13 +659,15 @@ class Game:
 
                     # on verifie que la case est vide
                     # TODO: améliorer ici pour chercher plsieurs chemins ...
-                    if distance(voisin, self.get_opponent_HQ()) == currentDistance-1 and self.case_vide(voisin.x, voisin.y):
-                        currentPos = voisin
-                        currentDistance -= 1
-                        currentGold -= 10
-                        found = True
-                        actions.append(f'TRAIN 1 {voisin.x} {voisin.y}')
-                        break
+                    if distance(voisin, self.get_opponent_HQ()) == currentDistance-1:
+                        if self.case_vide(voisin.x, voisin.y):
+                            currentPos = voisin
+                            currentDistance -= 1
+                            currentGold -= 10
+                            found = True
+                            actions.append(f'TRAIN 1 {voisin.x} {voisin.y}')
+                            break
+                        # ici on teste si y'a un mec de niveau 2 ou 3 qu'on peut butter
 
 
                 # si on a rien trouvé c'est mort pour partir de la
@@ -660,16 +684,32 @@ class Game:
         # fin de l'algo, pas fini donc False
         return False
 
+
+    # Strategie de decoupe de l'adversaire : 
+    # on vérifie x et y avec 4 <= x ou y <= 8 soit 5+5 == 10 boucles.
+    # Pour chaque ligne/colonne : 
+    #     - on vérifie si la map est "facile", donc pas de mur au milieu ou ce genre de trucs (bref, NEANT accepte qu'aux extremités)
+    #     - on regarde si on a une unite sur la ligne, si on peut construire sur toute la ligne (tune)
+    #     - A partir de là, on calcule "combien" ça fait perdre de tunes à l'adversaire. TILE=1 ; UNIT=sa valeur
+    #     - on garde la strat si coût*2 < (tune perdue par l'adversaire)
+    #     On ordonne les stratégies (plus grosse perte pour l'ennemi en premier)
+    #     On applique la meilleure
+    def calcul_decoupe_adversaire(self):
+        return False
+
     def build_output(self):
         self.calcul_carte_defense()
 
         self.move_units()
 
         # On peut gagner en un tour ?
-        if self.calcul_capture_directe() == True:
+        if self.calcul_capture_directe():
             return
 
         # Calcul si on peut decouper l'adversaire
+        if self.calcul_decoupe_adversaire():
+            return
+
         self.protect_base()
         self.build_mines()
         self.train_units()
