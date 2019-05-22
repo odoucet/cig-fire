@@ -1,10 +1,11 @@
 import sys 
 import os
+import time
 
 # Pour faire de beaux dessins
 from PIL import Image, ImageDraw, ImageFont
 
-from cig import *
+from cig import Game, Pathfinding, Point, Unit, OPPONENT, ME, distanceMap
 
 ## Draw
 DRAWZOOM=50
@@ -80,16 +81,15 @@ def test_map_cas1():
         ['.', '.', 'X', 'X', 'X', 'X', 'X', '#', '#', 'X', 'X', 'X'], 
         ['#', '.', 'X', 'X', 'X', '.', '#', '#', '#', 'X', 'X', 'X']]
     # buildings:
-    g.buildings = [Building(ME, HQ, 0, 0)]
-    g.OpponentBuildings = [Building(OPPONENT, HQ, 11, 11)]
+    g.hq = Point(0, 0)
+    g.opponentHq = Point(11,11)
+    g.calcul_distance_map()
     #drawMap(g.map, "map")
+    
     g.startTime = time.time()
 
     g.calcul_carte_defense()
     #drawMap(g.defenseMap, "defensemap","map")
-    assert g.debugMapANous[4][11] is not None and g.debugMapANous[4][11] == 15
-    assert g.debugMapANous[5][4] is not None and g.debugMapANous[5][4] == -1
-    assert g.debugMapANous[7][2] is not None and g.debugMapANous[7][2] == 11
 
     # Petite marge
     #assert (time.time()-g.startTime) > 0.06
@@ -117,17 +117,18 @@ def test_map_cas2():
     ]
 
     # buildings:
-    g.buildings = [Building(ME, HQ, 0, 0)]
-    g.OpponentBuildings = [Building(OPPONENT, HQ, 11, 11)]
+    g.hq = Point(0, 0)
+    g.opponentHq = Point(11,11)
+    g.calcul_distance_map()
     drawMap(g.map, "map")
 
     g.startTime = time.time()
     g.calcul_carte_defense()
-    drawMap(g.debugMapANous, "mapanous","defmap")
-    sys.stderr.write("Temps de construction: "+str(time.time()-g.startTime))
-
+    # on veut pas que la defenseMap prenne plus de 50ms
+    assert time.time()-g.startTime < 0.5
     drawMap(g.defenseMap, "defensemap","defmap")
     assert g.defenseMap[4][10] is not None and g.defenseMap[4][10] == 1
+    
 
 
 ### CAS NUMERO 3 ###
@@ -150,16 +151,17 @@ def test_map_cas3():
         ['#', '.', '.', '.', 'X', '.', '#', '#', '#', 'X', 'X', 'X']]
 
     # buildings:
-    g.buildings = [Building(ME, HQ, 0, 0)]
-    g.OpponentBuildings = [Building(OPPONENT, HQ, 11, 11)]
+    g.hq = Point(0, 0)
+    g.opponentHq = Point(11,11)
+    g.calcul_distance_map()
     drawMap(g.map, "map")
 
     g.startTime = time.time()
     g.calcul_carte_defense()
-    drawMap(g.debugMapANous, "mapanous","defmap")
+    #drawMap(g.debugMapANous, "mapanous","defmap")
     sys.stderr.write("Temps de construction: "+str(time.time()-g.startTime))
 
-    drawMap(g.defenseMap, "defensemap","defmap")
+    #drawMap(g.defenseMap, "defensemap","defmap")
     assert g.defenseMap[2][2] is not None and g.defenseMap[2][2] > 10
     assert g.defenseMap[2][6] is not None and g.defenseMap[2][6] == 1
 
@@ -218,11 +220,11 @@ def test_algo_distance2():
         ['.', '.', 'X', '#', 'X', 'X', 'X', '#', '#', 'X', 'X', 'X'], 
         ['#', '.', '.', '#', 'X', '.', '#', '#', '#', 'X', 'X', 'X']]
 
-    drawMap(macarte, "mapdistance")
+    #drawMap(macarte, "mapdistance")
 
     startTime = time.time()
     distanceMap= g.buildDistanceMap(macarte, Point(0, 0))
-    drawMap(distanceMap, "distancemap3","defmap", "Temps de construction: "+str(time.time()-startTime))
+    #drawMap(distanceMap, "distancemap3","defmap", "Temps de construction: "+str(time.time()-startTime))
     assert distanceMap[4][4] is None
     assert distanceMap[2][2] is not None and distanceMap[8][7] == 17
     assert distanceMap[9][9] is not None and distanceMap[9][9] == 18
@@ -230,7 +232,84 @@ def test_algo_distance2():
     # Autre cas avec la même carte : départ au milieu ! 
     startTime = time.time()
     distanceMap= g.buildDistanceMap(macarte, Point(5, 5))
-    drawMap(distanceMap, "distancemap4","defmap", "Temps de construction: "+str(time.time()-startTime))
+    #drawMap(distanceMap, "distancemap4","defmap", "Temps de construction: "+str(time.time()-startTime))
     assert distanceMap[10][8] is None
     assert distanceMap[0][2] is not None and distanceMap[0][2] == 8
     assert distanceMap[5][7] is not None and distanceMap[5][7] == 6
+
+# la capture directe, c'est le fait de spawner pleins d'unités lvl1 jusqu'à la base ennemie
+def test_algo_capture_directe1():
+    g = Game()
+    p = Pathfinding()
+    
+    # attention, carte "inversée" visuellement ici 
+    g.map = [
+        ['O', 'O', 'O', '#', '#', '#', 'O', 'O', 'O', 'O', 'O', '#'], 
+        ['O', 'O', 'O', '#', '#', 'O', 'O', 'O', 'O', 'O', 'O', 'O'], 
+        ['O', 'O', 'O', 'O', '#', 'O', 'O', 'O', 'O', 'O', 'O', 'O'], 
+        ['#', '#', 'O', 'O', '#', 'X', 'X', 'O', 'O', 'O', 'O', 'O'], 
+        ['#', 'O', 'O', 'O', '#', 'X', '#', 'X', 'O', 'O', 'O', 'O'], 
+        ['O', 'O', 'O', 'X', 'O', 'O', '#', 'X', 'O', 'O', 'O', 'O'], 
+        ['O', 'O', 'X', 'X', 'O', 'X', '#', 'X', 'X', 'O', 'O', 'O'], 
+        ['O', 'O', 'O', '#', 'X', 'X', '#', 'X', 'X', 'O', '.', '#'], 
+        ['O', '.', 'X', '#', 'X', 'X', '#', 'X', 'X', 'O', '#', '#'], 
+        ['.', '.', 'X', '#', 'X', 'X', 'X', 'X', 'X', 'X', 'X', '.'], 
+        ['.', '.', 'X', '#', 'X', 'X', 'X', '#', '#', 'X', 'X', 'X'], 
+        ['#', '.', '.', '#', 'X', '.', '#', '#', '#', 'X', 'X', 'X']]
+    # on va avoir besoin des bâtiments et unités ennemies: 
+    g.units.append(Unit(ME, 1, 1, 8, 9))
+    g.hq = Point(0, 0)
+    g.opponentHq = Point(11,11)
+    g.calcul_distance_map()
+
+    # test1: aucun bâtiment ni unité énnemi
+    g.gold = 50
+    g.income = 1 # doit pas jouer
+    drawMap(g.map, "cd1-map")
+    drawMap(distanceMap[11][11], "cd1-distancemap", "defmap")
+
+
+    assert g.calcul_capture_directe() is True
+    # ensuite on verifie les actions
+    print(g.actions)
+    assert "TRAIN 1 9 9" in g.actions
+    assert "TRAIN 1 11 11" in g.actions
+
+def test_algo_capture_directe2():
+    g = Game()
+    p = Pathfinding()
+    
+    # attention, carte "inversée" visuellement ici 
+    g.map = [
+        ['O', 'O', 'O', '#', '#', '#', 'O', 'O', 'O', 'O', 'O', '#'], 
+        ['O', 'O', 'O', '#', '#', 'O', 'O', 'O', 'O', 'O', 'O', 'O'], 
+        ['O', 'O', 'O', 'O', '#', 'O', 'O', 'O', 'O', 'O', 'O', 'O'], 
+        ['#', '#', 'O', 'O', '#', 'X', 'X', 'O', 'O', 'O', 'O', 'O'], 
+        ['#', 'O', 'O', 'O', '#', 'X', '#', 'X', 'O', 'O', 'O', 'O'], 
+        ['O', 'O', 'O', 'X', 'O', 'O', '#', 'X', 'O', 'O', 'O', 'O'], 
+        ['O', 'O', 'X', 'X', 'O', 'X', '#', 'X', 'X', 'O', 'O', 'O'], 
+        ['O', 'O', 'O', '#', 'X', 'X', '#', 'X', 'X', 'O', '.', '#'], 
+        ['O', '.', 'X', '#', 'X', 'X', '#', 'X', 'X', 'O', '#', '#'], 
+        ['.', '.', 'X', '#', 'X', 'X', 'X', 'X', 'X', 'X', 'X', '#'], 
+        ['.', '.', 'X', '#', 'X', 'X', 'X', '#', '#', '#', 'X', 'X'], 
+        ['#', '.', '.', '#', 'X', '.', '#', '#', '#', '#', 'X', 'X']]
+    # on va avoir besoin des bâtiments et unités ennemies: 
+    # test2: on rajoute un niveau 1 sur le chemin
+    g.OpponentUnits.append(Unit(OPPONENT, 1, 1, 10, 10))
+
+    g.gold = 70
+    g.income = 1 # doit pas jouer
+    drawMap(g.map, "cd2-map")
+
+    startTime = time.time()
+    distanceMap= p.buildDistanceMap(g.map, Point(11, 11))
+    drawMap(distanceMap, "cd2-distance","defmap", "Temps de construction: "+str(time.time()-startTime))
+
+    # mini check quand mm
+    assert distanceMap[8][9] == 5
+
+    assert g.calcul_capture_directe() is True
+    # ensuite on verifie les actions
+    assert "TRAIN UNIT 1 9 9" in g.actions
+    assert "TRAIN UNIT 2 10 10" in g.actions
+    assert "TRAIN UNIT 1 11 11" in g.actions

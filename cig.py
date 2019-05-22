@@ -1,5 +1,4 @@
 import sys
-import math
 import time
 import copy
 
@@ -31,6 +30,16 @@ class Point:
     def __init__(self, x: int, y: int):
         self.x = x
         self.y = y
+
+    def __str__(self):
+        return f'({self.x},{self.y})'
+
+    def __eq__(self, other):
+        return (self.x == other.x and self.y == other.y)
+
+    def __hash__(self):
+        return hash(('x', self.x,
+                 'y', self.y))
 
     # Retourne le point dans srcArray le plus proche de point
     # srcArray: Point[]
@@ -160,8 +169,10 @@ class Game:
                     destination = unit.nearest(tmpEnnemi)
 
                 self.actions.append(f'MOVE {unit.id} {destination.x} {destination.y}')
-                unit.x = destination.x
-                unit.y = destination.y
+                # on fait pas de parcours, donc on met a jour que si la destination est juste la
+                if (distance(unit, destination) == 1):
+                    unit.x = destination.x
+                    unit.y = destination.y
                 continue
 
             # ici on devrait boucler jusqu'à trouver une bonne destination : 
@@ -309,7 +320,7 @@ class Game:
                 positionTourelle = Point(9, 9)
             
             for building in self.buildings:
-                if building.type == TOWER and building.x == positionTourelle.x and building.y == positionTourelle.y:
+                if building.type == TOWER and building == positionTourelle:
                     poserTourelle = False
                     break
             if poserTourelle:
@@ -390,69 +401,72 @@ class Game:
             return
 
         # on passe maintenant au taff
-        # TODO: faire ce taff pour toutes les cases ACTIVE, par ordre de distance avec notre QG
-        for x in range(WIDTH):
-            for y in range(HEIGHT): 
-                # on a assez de temps ?
-                if self.check_timeout():
-                    sys.stderr.write("TIMEOUT REACHED in calcul_carte_defense("+str(x)+","+str(y)+") WE EXITED BEFORE DEFENSEMAP COMPLETE\n")
-                    return
-                
-                # on peut sauter la case si on a déjà une tour dessus ou à une distance de 1
-                # TODO: reecrire ça mieux ...
-                if Point(x, y) in self.buildings:
-                    continue
-                skip = False
-                for point in Point(x,y).getAdjacentes(self.map):
-                    if point.x == x and point.y == y:
+        casesPossibles = self.get_my_HQ().sortNearest(self.get_points_matching([ACTIVE]))
+        positionsCalculees = 0
+        positionsPossibles = len(casesPossibles)
+        for currentCase in casesPossibles:
+            # on a assez de temps ?
+            if self.check_timeout():
+                sys.stderr.write(f"TIMEOUT in calcul_carte_defense({currentCase}) Fait: {positionsCalculees}/{positionsPossibles}\n")
+                return
+            
+            positionsCalculees += 1
+
+            # on peut sauter la case si on a déjà une tour dessus ou à une distance de 1
+            # TODO: reecrire ça mieux ...
+            if currentCase in self.buildings:
+                continue
+            
+            skip = False
+            for point in currentCase.getAdjacentes(self.map):
+                for building in self.buildings:
+                    if building.type == TOWER and building == point:
                         skip = True
                         break
-                if skip:
+            if skip:
+                continue
+
+            # si on est trop pres de notre QG ça sert à rien
+            if distance(currentCase, self.get_my_HQ()) < 3:
+                self.defenseMap[currentCase.x][currentCase.y] = 0
+                continue
+
+            # la grosse formule commence ici
+            # Etape 1 - on copie la map 
+            # IL FAUT ABSOLUMENT UTILISER DEEPCOPY CAR ON A UN TABLEAU DE TABLEAU!
+            newMap =  copy.deepcopy(self.map)
+
+            # Ensuite on la modifie pour virer la case courante
+            newMap[currentCase.x][currentCase.y] = INACTIVE
+            newMapParcours = [ [ None for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
+
+            # Ici on recalcule une nouvelle carte, en partant de notre base. Donc plus on est loin, plus c'est "cher"
+            aTraiter = [ self.get_my_HQ()  ]
+            debugi = 0
+            while len(aTraiter) > 0 and debugi < 100: # on calcule pas trop loin
+                debugi += 1
+                element = aTraiter.pop(0)
+
+                # TODO: normalement déjà check plus bas (case not in aTraiter) mais bon ...
+                if newMapParcours[element.x][element.y] == 1:
+                    sys.stderr.write(f"ON DEVRAIT PAS ETRE LA!")
                     continue
+                
+                newMapParcours[element.x][element.y] = 1
+                
+                cases = element.getAdjacentes(newMap, [ACTIVE])
+                for case in cases:
+                    if newMapParcours[case.x][case.y] is None and case not in aTraiter:
+                        aTraiter.append(case)
+            
+            # Maintenant on calcule le nbre de cases à nous: 
+            nbCases = 0
+            for tmpx in range(WIDTH):
+                for tmpy in range(HEIGHT):
+                    if newMapParcours[tmpx][tmpy] == 1:
+                        nbCases += 1
+            self.defenseMap[currentCase.x][currentCase.y] = (nbCasesANous - nbCases)
 
-                # pas de raison de pas calculer pour cette case ...
-                if self.map[x][y] == ACTIVE:
-                    # si on est trop pres de notre QG ça sert à rien
-                    if distance(Point(x,y), self.get_my_HQ()) < 3:
-                        self.defenseMap[x][y] = 0
-                        continue
-
-                    # la grosse formule commence ici
-                    # Etape 1 - on copie la map 
-                    # IL FAUT ABSOLUMENT UTILISER DEEPCOPY CAR ON A UN TABLEAU DE TABLEAU!
-                    newMap =  copy.deepcopy(self.map)
-
-                    # Ensuite on la modifie pour virer la case courante
-                    newMap[x][y] = INACTIVE
-                    newMapParcours = [ [ None for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
-
-                    # Ici on recalcule une nouvelle carte
-                    aTraiter = [ self.get_my_HQ()  ]
-                    debugi = 0
-                    while len(aTraiter) > 0 and debugi < 500:
-                        debugi += 1
-                        element = aTraiter.pop(0)
-
-                        # si deja fait
-                        if newMapParcours[element.x][element.y] == 1:
-                            continue
-                        
-                        newMapParcours[element.x][element.y] = 1
-                        
-                        cases = element.getAdjacentes(newMap, [ACTIVE])
-                        for case in cases:
-                            if newMapParcours[case.x][case.y] is None and case not in aTraiter:
-                                aTraiter.append(case)
-                 
-                    # Maintenant on calcule le nbre de cases à nous: 
-                    nbCases = 0
-                    for tmpx in range(WIDTH):
-                        for tmpy in range(HEIGHT):
-                            if newMapParcours[tmpx][tmpy] == 1:
-                                nbCases += 1
-                    self.defenseMap[x][y] = abs(nbCasesANous - nbCases)
-
-                    
         #debugPythonMap(self.map)
         #debugMap(self.defenseMap)
         
@@ -483,6 +497,30 @@ class Game:
             return True
         return False 
 
+    # return True si une case est vide (personne dessus) et n'est pas un mur
+    # EXCEPTION DU QG ADVERSE: c'est une case vide :p
+    def case_vide(self,x,y)->bool:
+        if self.map[x][y]  == NEANT:
+            return False
+        vide = True
+        for unit in self.units:
+            if unit.x ==x and unit.y == y:
+                vide = False
+                break
+        for unit in self.OpponentUnits:
+            if unit.x ==x and unit.y == y:
+                vide = False
+                break
+        for unit in self.buildings:
+            if unit.x ==x and unit.y == y:
+                vide = False
+                break
+        for unit in self.OpponentBuildings:
+            if unit.x == x and unit.y == y and unit.type != HQ:
+                vide = False
+                break
+
+        return vide
 
     def update(self):
         self.units.clear()
@@ -542,11 +580,7 @@ class Game:
         # et on réintegre la fonction distance() qui se basera dessus (juste aller chercher des coordonnées au bon endroit)
         # NOTE: distanceMap est une variable *GLOBALE* (oui c'est mal)
         if distanceMap[0][0] is None:
-            p = Pathfinding()
-            for x in range(WIDTH):
-                for y in range(HEIGHT):
-                    if self.map[x][y] != NEANT:
-                        distanceMap[x][y] = p.buildDistanceMap(self.map, Point(x, y))
+            self.calcul_distance_map()
 
         # TODO: deplacer ça dans une fonction pour ecrire le test qui va bien :)
         # carte des spawns, avec les positions sur lesquelles on peut spawn (cases vides): 
@@ -565,15 +599,80 @@ class Game:
             self.spawnMap[case.x][case.y] = False
 
 
+    def calcul_distance_map(self):
+        p = Pathfinding()
+        for x in range(WIDTH):
+            for y in range(HEIGHT):
+                if self.map[x][y] != NEANT:
+                    distanceMap[x][y] = p.buildDistanceMap(self.map, Point(x, y))
+
+
+    # Calcul si une capture directe est possible, c'est à dire en spawnant pleins d'unités jusqu'au QG ennemi
+    # Si oui, alors on gagne en un coup \o/
+    def calcul_capture_directe(self)->bool:
+        # Notre tune == distance max
+        # comme on fait ce calcul à chaque tour, case la plus proche de l'ennemi == forcément une unité
+        # TODO: si on fait ça, vérifier qu'une unité se déplace bien sur une case permise (== gérer les tours adverses)
+
+        for unitDepart in self.get_opponent_HQ().sortNearest(self.units):
+            # on verifie si economiquement c'est viable
+            if distance(unitDepart, self.get_opponent_HQ()) > self.gold/10:
+                continue
+
+            found = False
+
+            # ah! si on est ici c'est que c'est théoriquement possible. On verifie maintenant que chaque case de la solution est libre/battable
+            currentGold = self.gold # on met de coté pour pas tout casser
+            currentDistance = distance(unitDepart, self.get_opponent_HQ())
+            currentPos = unitDepart # position courante
+            actions = []
+            sys.stderr.write(f"Unit({unitDepart.x},{unitDepart.y}): curDist={currentDistance}, curGold={currentGold}")
+            while currentDistance > 0 and currentGold > 0:
+                # on fait des trucs
+                found = False
+                for voisin in currentPos.getAdjacentes(self.map):
+                    # on veut pas de mur :p
+                    if self.map[voisin.x][voisin.y] == NEANT:
+                        continue
+
+                    # on verifie que la case est vide
+                    # TODO: améliorer ici pour chercher plsieurs chemins ...
+                    if distance(voisin, self.get_opponent_HQ()) == currentDistance-1 and self.case_vide(voisin.x, voisin.y):
+                        currentPos = voisin
+                        currentDistance -= 1
+                        currentGold -= 10
+                        found = True
+                        actions.append(f'TRAIN 1 {voisin.x} {voisin.y}')
+                        break
+
+
+                # si on a rien trouvé c'est mort pour partir de la
+                if found == False:
+                    break
+            
+            # au fait c'est bon ?
+            sys.stderr.write(f"Dist finale: {currentDistance}, gold={currentGold}, found={found}\n")
+            if found == True and currentDistance == 0 and currentGold >= 0:
+                self.actions.extend(actions)
+                self.actions.append("MSG LONG LIVE THE KING") # pour reconnaitre qu'on est dans cette strat'
+                return True # oui !
+
+        # fin de l'algo, pas fini donc False
+        return False
+
     def build_output(self):
         self.calcul_carte_defense()
 
         self.move_units()
 
+        # On peut gagner en un tour ?
+        if self.calcul_capture_directe() == True:
+            return
+
+        # Calcul si on peut decouper l'adversaire
         self.protect_base()
         self.build_mines()
         self.train_units()
-        
 
         # il reste de la tune ? on ajoute des tours :)
         self.build_towers()
@@ -630,7 +729,7 @@ class Pathfinding:
 # calcule la distance entre deux cases. Hyper utilise donc mis en global
 # On peut pas aller en diagonale donc en fait c'est simple
 # on utilise la distanceMap de f et on cherche la valeur de t
-def distance(f, t) -> float:
+def distance(f: Point, t: Point) -> int:
     return distanceMap[f.x][f.y][t.x][t.y]
 
 
