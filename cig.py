@@ -112,6 +112,9 @@ class Game:
         self.nbMines = 0
         self.nbOpponentMines = 0
 
+        # Si on a posé notre tourelle de défense en 2,2 ou 9,9
+        self.tourelleDefense = False
+
         # les positions de defenses, avec des unites dedans à ne pas toucher
         self.defensePositions = []
 
@@ -130,6 +133,19 @@ class Game:
     def get_opponent_HQ(self)->Point:
         return self.opponentHq
 
+    # Retourne les positions de notre case adjacente qui sera notre prochaine position si on veut se rendre en X,Y
+    # Vérifie aussi si le déplacement est possible, donc si on récupère None, alors c'est qu'on peut pas y aller.
+    def get_next_pos(self, nous: Unit, destination):
+        casesPossibles = nous.getAdjacentes(self.map)
+        for case in casesPossibles:
+            if (distanceMap[destination.x][destination.y][case.x][case.y] == 
+                distanceMap[destination.x][destination.y][nous.x][nous.y]-1 and 
+                self.can_spawn_level(case.x, case.y, nous.level)
+            ):
+                # ça semble marcher
+                return case
+        # si on est là c'est que non, ça marche pas :(
+        return None
 
     # Recupere toutes les cases qui respectent le type demandé
     # (pour éviter de recoder sans arret la même chose)
@@ -140,7 +156,6 @@ class Game:
                 if self.map[x][y] in types:
                     casesVides.append(Point(x, y))
         return casesVides
-
 
     # Strategie de deplacement des unites (Olivier)
     # un truc que la règle ne dit pas de facon claire : si un soldat est sur une case inactive, il meurt !
@@ -168,21 +183,44 @@ class Game:
                     tmpEnnemi.extend(self.OpponentBuildings)
                     destination = unit.nearest(tmpEnnemi)
 
-                self.actions.append(f'MOVE {unit.id} {destination.x} {destination.y}')
-                # on fait pas de parcours, donc on met a jour que si la destination est juste la
-                if (distance(unit, destination) == 1):
-                    unit.x = destination.x
-                    unit.y = destination.y
-                continue
+                nextPos = self.get_next_pos(unit, destination)
+                if nextPos is not None:
+                    self.actions.append(f'MOVE {unit.id} {nextPos.x} {nextPos.y}')
+                    self.map[nextPos.x][nextPos.y] = ACTIVE
+                    # TODO: virer l'unite/building si y'a ...
+                    unit.x = nextPos.x
+                    unit.y = nextPos.y
+                    continue
 
+            # Si ennemi de mm niveau a coté on bouge pas
+            doNotMove = False
+            for case in unit.getAdjacentes(self.map):
+                for ennemi in self.OpponentUnits:
+                    if case == ennemi:
+                        # on bouge pas
+                        doNotMove = True
+                        break
+            
+            if doNotMove:
+                continue
+            
             # ici on devrait boucler jusqu'à trouver une bonne destination : 
             # - pas déjà ciblée par une autre unité
             # - 
             destination = unit.nearest(casesVides)
-            if (destination is not None): 
-                self.actions.append(f'MOVE {unit.id} {destination.x} {destination.y}')
+            if destination is not None: 
+                nextPos = self.get_next_pos(unit, destination)
+                if nextPos is None:
+                    # on peut pas y aller
+                    continue
+                
+                self.actions.append(f'MOVE {unit.id} {nextPos.x} {nextPos.y}')
                 # que quelqu'un d'autre n'y aille pas
                 casesVides.remove(destination)
+                unit.x = nextPos.x
+                unit.y = nextPos.y
+                 # TODO: virer l'unite/building si y'a ...
+                self.map[nextPos.x][nextPos.y] = ACTIVE
             else:
                 # destination == HQ ennemi ! 
                 destination = self.get_opponent_HQ()
@@ -196,7 +234,8 @@ class Game:
         if len(self.get_points_matching([NEUTRE])) < 30 or len(self.units) >= 10:
 
             # Boucle 1: est-ce qu'on peut dégommer des niveaux 2 ou 3 en spawnant dessus ?
-            for ennemi in self.OpponentUnits:
+            # on la joue defense: on spawn sur les mecs qui nous mettent en danger
+            for ennemi in self.get_my_HQ().sortNearest(self.OpponentUnits):
                 if ennemi.level < 2:
                     continue
                 if ennemi.level == 3:
@@ -209,10 +248,11 @@ class Game:
                     self.gold   -= Unit.TRAINING[ennemi.level+1]
                     self.income -= Unit.ENTRETIEN[ennemi.level+1]
                     self.map[ennemi.x][ennemi.y] = ACTIVE # case prise maintenant :D
+                    self.units.append(Unit(ME, 1, ennemi.level+1, ennemi.x, ennemi.y))
                     self.OpponentUnits.remove(ennemi) # on vire l'ennemi
             
             # Boucle 2 : est-ce qu'on peut dégommer une TOUR ennemies en spawnant un niveau 3 dessus ? ^^
-            for ennemi in self.OpponentBuildings:
+            for ennemi in self.get_my_HQ().sortNearest(self.OpponentBuildings):
                 if ennemi.type != TOWER:
                     continue
                 
@@ -222,20 +262,27 @@ class Game:
                     self.gold   -= Unit.TRAINING[3]
                     self.income -= Unit.ENTRETIEN[3]
                     self.map[ennemi.x][ennemi.y] = ACTIVE # case prise maintenant :D
+                    self.units.append(Unit(ME, 1, 3, ennemi.x, ennemi.y))
                     self.OpponentBuildings.remove(ennemi) # on vire l'ennemi
 
             # Boucle 4: est-ce qu'on peut dégommer un niveau 1 en spawnant un 2 dessus ? 
-            for ennemi in self.OpponentUnits:
+            for ennemi in self.get_my_HQ().sortNearest(self.OpponentUnits):
                 if ennemi.level > 1:
                     continue
                 
-                if (len(ennemi.getAdjacentes(self.map, [ACTIVE])) > 0 and 
-                self.gold >= (Unit.TRAINING[ennemi.level+1]) and self.income >= Unit.ENTRETIEN[ennemi.level+1]):
-                    self.actions.append(f'TRAIN {ennemi.level+1} {ennemi.x} {ennemi.y}')
-                    self.gold   -= Unit.TRAINING[ennemi.level+1]
-                    self.income -= Unit.ENTRETIEN[ennemi.level+1]
-                    self.map[ennemi.x][ennemi.y] = ACTIVE # case prise maintenant :D
-                    self.OpponentUnits.remove(ennemi) # on vire l'ennemi
+                if len(ennemi.getAdjacentes(self.map, [ACTIVE])) > 0:
+                    # deux boucles: si on peut faire du niveau 2, ou du niveau 3
+                    tryLevel = range(min(3, ennemi.level+1), 3)
+                    for level in tryLevel:
+                        if (self.can_spawn_level(ennemi.x, ennemi.y, level) and 
+                        self.gold >= (Unit.TRAINING[ennemi.level+1]) and self.income >= Unit.ENTRETIEN[ennemi.level+1]):
+                            self.actions.append(f'TRAIN {ennemi.level+1} {ennemi.x} {ennemi.y}')
+                            self.gold   -= Unit.TRAINING[ennemi.level+1]
+                            self.income -= Unit.ENTRETIEN[ennemi.level+1]
+                            self.map[ennemi.x][ennemi.y] = ACTIVE # case prise maintenant :D
+                            self.units.append(Unit(ME, 1, ennemi.level+1, ennemi.x, ennemi.y))
+                            self.OpponentUnits.remove(ennemi) # on vire l'ennemi
+                            break
             
         else:
             # on garde l'algo (pas terrible) qu'on a déjà, pour le moment
@@ -302,31 +349,32 @@ class Game:
     # Top priorité : protéger la base, en spawnant un soldat de niveau suffisant sur la ligne de combat d'une unité adverse
     # TODO: on peut mieux faire ici, et avoir des tourelles à de meilleurs endroits
     def protect_base(self):
+        # Optim:
+        if self.gold < 15:
+            return
         
         # J'aime l'idée de mettre une tourelle en 2,2 ou 9,9 si l'ennemi se rapproche, pour éviter les "rush" comme
         # certains joueurs le font.
-        # On essaie ça : si 3 adversaires sont à une distance <= 6, on pause la tourelle
-        nbAdversairesProche = 0
-        for unit in self.OpponentUnits:
-            if distance(unit, self.get_my_HQ()) <= 8:
-                nbAdversairesProche += 1
-        
-        #a reecrire mieux:
-        if nbAdversairesProche >= 3:
-            poserTourelle = True
-            if self.get_my_HQ().x == 0:
-                positionTourelle = Point(2, 2)
-            else:
-                positionTourelle = Point(9, 9)
-            
-            for building in self.buildings:
-                if building.type == TOWER and building == positionTourelle:
-                    poserTourelle = False
-                    break
-            if poserTourelle:
-                self.actions.append(f'BUILD TOWER {positionTourelle.x} {positionTourelle.y}')
-                self.gold -= 15
-                self.buildings.append(Building(ME, TOWER, positionTourelle.x, positionTourelle.y))
+        # Algo v2: si distance < (goldEnnemi+income)/10
+
+        if self.tourelleDefense == False:
+            ennemi = self.get_my_HQ().nearest(self.OpponentUnits)
+            if ennemi is not None and distance(ennemi, self.get_my_HQ()) <= (self.opponent_gold+self.opponent_income)/10:
+                if self.get_my_HQ().x == 0:
+                    positionTourelle = Point(2, 2)
+                else:
+                    positionTourelle = Point(9, 9)
+                
+                # faire gaffe si y'a une mine ...
+                for building in self.buildings:
+                    if building == positionTourelle:
+                        self.tourelleDefense = True
+                        break
+                if self.tourelleDefense == False:
+                    self.tourelleDefense = True
+                    self.actions.append(f'BUILD TOWER {positionTourelle.x} {positionTourelle.y}')
+                    self.gold -= 15
+                    self.buildings.append(Building(ME, TOWER, positionTourelle.x, positionTourelle.y))
 
 
         # On essaie d'avoir des tourelles sur les super points (defenseMap >= 7)
@@ -610,15 +658,30 @@ class Game:
         # on enleve les cases impossibles:
         for case in self.get_points_matching([NEANT]):
             self.spawnMap[case.x][case.y] = False
-        # on enleve toutes les unites et les buildings
-        for case in self.OpponentUnits:
-            self.spawnMap[case.x][case.y] = False
         for case in self.units:
             self.spawnMap[case.x][case.y] = False
         for case in self.buildings:
             self.spawnMap[case.x][case.y] = False
-        for case in self.OpponentBuildings:
-            self.spawnMap[case.x][case.y] = False
+
+
+    # verifie si on peut spawn une unite de niveau LEVEL sur la case en question
+    def can_spawn_level(self, x: int, y: int, level: int)->bool:
+        if self.spawnMap[x][y] == False:
+            return False
+        
+        if level == 3:
+            # on peut tout faire
+            return True
+
+        for unit in self.OpponentUnits:
+            if unit == Point(x, y) and unit.level >= level:
+                return False
+        # on verifie les tourelles
+        for building in self.OpponentBuildings:
+            if building.type == TOWER and Point(x, y) in building.getAdjacentes(self.map):
+                return False
+        # bah maintenant rien n'empeche :)
+        return True
 
 
     def calcul_distance_map(self):

@@ -43,6 +43,10 @@ Optim calcul_defense_map: au lieu de faire par x,y on le fait par distance à no
 *************
 Là on essaie tjs d'aller sur des cases protégées par une tour, donc ça marche pas.
 
+*************
+une fonction pour trouver toutes les cases de "bordure" de notre camp:
+https://github.com/Azkellas/a-code-of-ice-and-fire/blob/develop/src/test/Agent2.py#L84
+(à adapter)
 
 TODO
 ====

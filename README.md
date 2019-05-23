@@ -26,3 +26,8 @@ Useful addons
 -------------
  * CG Enhancer : https://github.com/Azkellas/cgenhancer
  * CGSync
+
+ToDo
+----
+Use local engine: https://github.com/Yuu6883/CodeOfFireAndIceNE
+
