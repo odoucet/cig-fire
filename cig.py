@@ -634,6 +634,7 @@ class Game:
         self.nbMines = 0
         self.nbOpponentMines = 0
         self.spawnMap = [ [ True for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
+        self.cacheCalculDecoupe = [ [ None for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
 
         for y in range(HEIGHT):
             line = input()
@@ -785,8 +786,96 @@ class Game:
     #     - on garde la strat si coût*2 < (tune perdue par l'adversaire)
     #     On ordonne les stratégies (plus grosse perte pour l'ennemi en premier)
     #     On applique la meilleure
-    def calcul_decoupe_adversaire(self):
+    def calcul_decoupe_adversaire(self)->bool:
+        scoresDecoupe = [] # on stockera un tableau avec [x => 4, score => 99] et on ordonnera par le champ score
+
+        # TODO: optim: sert à rien de découper avant le tour 10, on a pas la tune pour :)
+
+        for x in range(4, 9):
+            scoresDecoupe.append( {"x": x, "score": self.calcul_decoupe(x, None)} )
+        for y in range(4, 9):
+            scoresDecoupe.append( {"y": y, "score": self.calcul_decoupe(None, y)} )
+        
+        # on ordonne les scores
+        scores = sorted(scoresDecoupe, key = lambda i: i['score'], reverse=True)
+
+        #while len(scores) > 0:
+            # on applique
+            # TODO
+
+
+
+        # Fonction pas terminee
         return False
+
+    # algo de calcul de decoupe ligne par ligne/ col par col
+    def calcul_decoupe(self, x = None, y = None)->int:
+        if x is None and y is None:
+            return 0 # pas normal
+        
+        # on en profite pour garder un tableau avec les operations. Comme on calcule, autant pas faire le taff deux fois
+        self.cacheCalculDecoupe[x][y] = []
+
+        # on vérifie si la map est "facile"
+        # donc pas de mur au milieu ou ce genre de trucs (bref, NEANT accepte qu'aux extremités)
+        if y is None:
+            start = 0
+            end   = WIDTH-1
+            while self.map[x][start] == NEANT and start < WIDTH:
+                start += 1
+
+            while self.map[x][end] == NEANT and end >= 0:
+                start -= 1
+
+            if start == WIDTH-1 or end == 0:
+                # Toute la ligne pas bonne ? bizarre
+                sys.stderr.write(f"calcul_decoupe({x},{y}: ligne vide :(")
+                return 0
+            
+            # on verifie qu'on a pas de mur entre les deux
+            for tmpy in range(start, end):
+                if self.map[x][tmpy] == NEANT:
+                    # mur au milieu, par securite on fait pas
+                    sys.stderr.write(f"calcul_decoupe({x},{y}: mur au milieu")
+                    return 0
+
+            # - on regarde si on a une unite sur la ligne au moins
+            unitStart = None
+            for unit in self.units:
+                if unit.x == x:
+                    unitStart = unit
+                    break
+            
+            if unitStart is None:
+                return 0
+
+            # On part de notre unite et on incrémente vers la droite si on peut construire
+            costBuild = 0
+
+            # vers la droite, puis la gouche
+            for tmpy in (range(unitStart.y+1, WIDTH), range(unitStart.y-1, 0, -1)):
+                # c'est déjà à nous ? 
+                if self.map[x][tmpy] == ACTIVE:
+                    # on a la case, ça coute rien :)
+                    continue
+   
+                goodToGo = False
+                for level in [1, 2, 3]:
+                    if (self.can_spawn_level(x, tmpy, level) and  
+                    self.gold >= (Unit.TRAINING[level]) and self.income >= Unit.ENTRETIEN[level]):
+                        self.cacheCalculDecoupe[x][y].append(f"TRAIN {level} {x} {tmpy}")
+                        costBuild += Unit.TRAINING[level]
+                        goodToGo = True
+                
+                # on peut pas :(
+                if goodToGo == False:
+                    return 0
+
+        # TODO: faire pareil quand 'y' est défini
+
+        # TODO Calculer combien perd l'adversaire
+
+        return 0
 
     def build_output(self):
         self.calcul_carte_defense()
