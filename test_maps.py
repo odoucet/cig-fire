@@ -185,11 +185,11 @@ def test_algo_distance1():
         ['.', '.', 'X', 'X', 'X', 'X', 'X', '#', '#', 'X', 'X', 'X'], 
         ['#', '.', '.', '.', 'X', '.', '#', '#', '#', 'X', 'X', 'X']]
 
-    drawMap(macarte, "mapdistance")
+    #drawMap(macarte, "mapdistance")
 
     g.startTime = time.time()
     distanceMap= g.buildDistanceMap(macarte, Point(0, 0))
-    drawMap(distanceMap, "distancemap1","defmap", "Temps de construction: "+str(time.time()-g.startTime))
+    #drawMap(distanceMap, "distancemap1","defmap", "Temps de construction: "+str(time.time()-g.startTime))
     assert distanceMap[3][0] is None
     assert distanceMap[2][2] is not None and distanceMap[2][2] == 4
     assert distanceMap[2][6] is not None and distanceMap[11][9] == 20
@@ -197,7 +197,7 @@ def test_algo_distance1():
     # Autre cas avec la même carte : départ au milieu ! 
     g.startTime = time.time()
     distanceMap= g.buildDistanceMap(macarte, Point(5, 5))
-    drawMap(distanceMap, "distancemap2","defmap", "Temps de construction: "+str(time.time()-g.startTime))
+    #drawMap(distanceMap, "distancemap2","defmap", "Temps de construction: "+str(time.time()-g.startTime))
     assert distanceMap[11][7] is None
     assert distanceMap[2][2] is not None and distanceMap[2][2] == 6
     assert distanceMap[2][6] is not None and distanceMap[11][9] == 10

@@ -28,6 +28,9 @@ INACTIVEOPPONENT = "x"
 # On met notre distanceMap en global pour simplifier le code ... et désolé c'est dégueu :(
 distanceMap = [ [ None for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
 
+# debugTiming
+debugTiming = dict()
+
 class Point:
     def __init__(self, x: int, y: int):
         self.x = x
@@ -703,6 +706,9 @@ class Game:
         # de la marge sur l'income après le tour 10 pour pas se mettre à sec
         if self.tour >= 10:
             self.income -= 15
+        
+        # MAJ du temps:
+        debugTiming['update'] = time.time() - self.startTime 
 
     def update_spawnMap(self):
         # carte des spawns, avec les positions sur lesquelles on peut spawn (cases vides): 
@@ -840,7 +846,7 @@ class Game:
             sys.stderr.write(f"DecoupeX({obj['x']})={obj['score']}\n")
             self.actions.extend(self.cacheCalculDecoupeX[obj['x']])
         elif 'y' in obj:
-            sys.stderr.write(f"DecoupeX({obj['x']})={obj['score']}\n")
+            sys.stderr.write(f"DecoupeY({obj['y']})={obj['score']}\n")
             self.actions.extend(self.cacheCalculDecoupeY[obj['y']])
         else:
             sys.stderr.write(f"je suis pas sense etre la")
@@ -916,8 +922,8 @@ class Game:
                 # on peut pas :(
                 if goodToGo == False:
                     return 0
+            # coute rien car on a toute la ligne
             if costBuild == 0:
-                sys.stderr.write(f"({x}, none) COSTBUILD=0, ZARBI\n")
                 return 0
 
         # TODO: faire pareil quand 'y' est défini
@@ -971,15 +977,14 @@ class Game:
                 # on peut pas :(
                 if goodToGo == False:
                     return 0
+            # si on a déjà toute la ligne en bref :p
             if costBuild == 0:
-                sys.stderr.write(f"(none, {y}) COSTBUILD=0, ZARBI\n")
                 return 0
             ######FIN DU COPIER COLLE DEGUEU ########
 
 
         # TODO: prendre en compte si l'ennemi a une tour dans la zone "découpée" : lui permet de garder des cases et perd sans doute de son intéret ...
-
-        sys.stderr.write(f"({x}, none) actions={actions}\n")
+        #sys.stderr.write(f"({x}, none) actions={actions}\n")
 
         # Calculer combien perd l'adversaire
         argentPerdu = 0
@@ -1006,32 +1011,38 @@ class Game:
         # on stock les actions
         if y is None:
             self.cacheCalculDecoupeX[x] = actions
-        elif y is None:
+        elif x is None:
             self.cacheCalculDecoupeY[y] = actions
 
         # coût*2 < (tune perdue par l'adversaire)
         return (argentPerdu/costBuild*2)
 
-    def build_output(self):
-        self.calcul_carte_defense()
+    def timingFunc(self, funcName):
+        tmp = time.time()
+        r = funcName()
+        debugTiming[funcName.__name__] = time.time() - tmp
+        return r
 
-        self.move_units()
+    def build_output(self):
+        self.timingFunc(self.calcul_carte_defense)
+
+        self.timingFunc(self.move_units)
 
         # On peut gagner en un tour ?
-        if self.calcul_capture_directe():
+        if self.timingFunc(self.calcul_capture_directe):
             return
 
         # Calcul si on peut decouper l'adversaire
-        #self.calcul_decoupe_adversaire()
+        self.calcul_decoupe_adversaire()
 
         # on a encore de la tune ? on essaie !
-        self.protect_base()
-        self.build_mines()
-        self.train_units()
+        self.timingFunc(self.protect_base)
+        self.timingFunc(self.build_mines)
+        self.timingFunc(self.train_units)
 
         # il reste de la tune ? on ajoute des tours :)
         if not self.check_timeout():
-            self.build_towers()
+            self.timingFunc(self.build_towers)
 
 
     def output(self):
@@ -1039,13 +1050,23 @@ class Game:
             print(';'.join(self.actions))
         else:
             print('WAIT')
-        sys.stderr.write("Time spent in round #"+str(self.tour)+": "+str(self.getTotalTime())+"ms")
-        debugPythonMap(self.map)
+        
+        # Temps mis dans chaque fonction: 
+        totalTime = self.getTotalTime()
+
+        sys.stderr.write("TOUR #"+str(self.tour)+": "+str(totalTime)+"ms\n")
+        if totalTime == 0:
+            return
+
+        for key, value in debugTiming.items():
+            sys.stderr.write(key+": "+str(round(value*1000/totalTime*100))+"% ")
+        
+        # Si on veut recup la carte: 
+        # debugPythonMap(self.map)
 
     # get total time in ms
     def getTotalTime(self)-> int:
         return round((time.time() - self.startTime)*1000)
-
 
 
 class Pathfinding:

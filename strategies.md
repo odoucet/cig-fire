@@ -53,3 +53,8 @@ TODO
 J'ai merdé les appels de fonctions Point, qui devraient pas passer tous les arguments mais faire monunite.getAdjacentes(). A réécrire
 
 Il faut coder un truc de pathfinding, car mes mecs essaient de se marcher dessus et on a pleins d'ordres invalides :(
+
+
+-------------
+Combats Argent contre le boss:
+On battait seed=-5853239339007614000
