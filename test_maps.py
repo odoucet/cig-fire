@@ -359,8 +359,8 @@ def test_algo_decoupe_ennemi():
 
     print(g.actions)
     drawMap(g.map, "decoupe1-mapfinal")
-    assert "TRAIN UNIT 1 5 8" in g.actions
-    assert "TRAIN UNIT 1 5 9" in g.actions
-    assert "TRAIN UNIT 1 5 10" in g.actions
+    assert "TRAIN 1 5 8" in g.actions
+    assert "TRAIN 1 5 9" in g.actions
+    assert "TRAIN 1 5 10" in g.actions
 
 

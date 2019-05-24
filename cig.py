@@ -341,7 +341,7 @@ class Game:
             # on entraine sur une case à nous, la plus proche du QG adverse
             case = casesSpawn.pop(0)
 
-            if self.spawnMap[case.x][case.y]:
+            if self.can_spawn_level(case.x, case.y, 1):
                 self.actions.append(f'TRAIN 1 {case.x} {case.y}')
                 # on baisse pas l'income, car on spawn sur une nouvelle case == rapporte 1 d'income
                 self.gold   -= Unit.TRAINING[1]
@@ -821,33 +821,34 @@ class Game:
         # on ordonne les scores
         scores = sorted(scoresDecoupe, key = lambda i: i['score'], reverse=True)
 
-        debugPythonMap(scores)
-        
+        if len(scores) == 0:
+            return False
+                
         # on prend juste la meilleure :)
 
         obj = scores.pop(0)
 
         # on veut au moins 1 au score: 
-        if obj.score < 1:
+        if obj['score'] < 1:
             return False
         
-        if hasattr(obj, 'x'):
-            sys.stderr.write(f"DecoupeX({obj.x})={obj.score}\n")
-            self.actions.extend(self.cacheCalculDecoupeX[obj.x])
-        elif hasattr(obj, 'y'):
-            sys.stderr.write(f"DecoupeX({obj.x})={obj.score}\n")
-            self.actions.extend(self.cacheCalculDecoupeY[obj.y])
-        
-        return True
-
+        if 'x' in obj:
+            sys.stderr.write(f"DecoupeX({obj['x']})={obj['score']}\n")
+            self.actions.extend(self.cacheCalculDecoupeX[obj['x']])
+        elif 'y' in obj:
+            sys.stderr.write(f"DecoupeX({obj['x']})={obj['score']}\n")
+            self.actions.extend(self.cacheCalculDecoupeY[obj['y']])
+        else:
+            sys.stderr.write(f"je suis pas sense etre la")
         # TODO: rejouer les actions TRAIN (en grepant ce qu'on fait), pour mettr à jour gold et income
         # comme ça on peut encore spawn des unites apres :p
 
-        # Fonction pas terminee
-        return False
+        return True
+
+        
 
     # algo de calcul de decoupe ligne par ligne/ col par col
-    def calcul_decoupe(self, x = None, y = None)->int:
+    def calcul_decoupe(self, x = None, y = None)->float:
         if x is None and y is None:
             return 0 # pas normal
         
@@ -860,6 +861,7 @@ class Game:
         # on vérifie si la map est "facile"
         # donc pas de mur au milieu ou ce genre de trucs (bref, NEANT accepte qu'aux extremités)
         if y is None:
+            #######CE MORCEAU EST COPIE/COLLE PLUS BAS, PUTAIN DE CODE DE MERDE C'EST VRAIMENT DEGUEU ######
             start = 0
             end   = WIDTH-1
             while self.map[x][start] == NEANT and start < WIDTH:
@@ -889,8 +891,6 @@ class Game:
             
             if unitStart is None:
                 return 0
-            
-            sys.stderr.write(f"unitStart({unitStart.x},{unitStart.y}) start={start}, end={end}\n")
 
             # vers la droite, puis la gauche
             from itertools import chain
@@ -918,8 +918,60 @@ class Game:
 
         # TODO: faire pareil quand 'y' est défini
         else:
-            sys.stderr.write(f"PAS CODE POUR y={y}\n")
-            return 0
+            #######CE MORCEAU EST COPIE/COLLE PLUS BAS, PUTAIN DE CODE DE MERDE C'EST VRAIMENT DEGUEU ######
+            start = 0
+            end   = WIDTH-1
+            while self.map[start][y] == NEANT and start < HEIGHT:
+                start += 1
+
+            while self.map[end][y] == NEANT and end >= 0:
+                end -= 1
+
+            if start == HEIGHT-1 or end == 0:
+                return 0
+
+            # on verifie qu'on a pas de mur entre les deux
+            for tmpx in range(start, end):
+                if self.map[tmpx][y] == NEANT:
+                    # mur au milieu, par securite on fait pas
+                    sys.stderr.write(f"calcul_decoupe({x},{y}: mur au milieu")
+                    return 0
+
+            # - on regarde si on a une unite sur la ligne au moins
+            unitStart = None
+            for unit in self.units:
+                if unit.y == y:
+                    unitStart = unit
+                    break
+            
+            if unitStart is None:
+                return 0
+
+            # vers le bas, puis le haut
+            from itertools import chain
+            for tmpx in chain(range(unitStart.x+1, end+1), range(unitStart.x-1, start, -1)):
+                # c'est déjà à nous ? 
+                if self.map[tmpx][y] in [ACTIVE, NEUTRE, INACTIVEOPPONENT, INACTIVE]:
+                    # on a la case, ça coute rien :)
+                    continue
+   
+                goodToGo = False
+                for level in [1, 2, 3]:
+                    if (self.can_spawn_level(tmpx, y, level) and  
+                    self.gold >= (Unit.TRAINING[level]) and self.income >= Unit.ENTRETIEN[level]):
+                        actions.append(f"TRAIN {level} {tmpx} {y}")
+                        costBuild += Unit.TRAINING[level]
+                        goodToGo = True
+                        break
+                
+                # on peut pas :(
+                if goodToGo == False:
+                    return 0
+            if costBuild == 0:
+                sys.stderr.write(f"(none, {y}) COSTBUILD=0, ZARBI\n")
+                return 0
+            ######FIN DU COPIER COLLE DEGUEU ########
+
 
         # TODO: prendre en compte si l'ennemi a une tour dans la zone "découpée" : lui permet de garder des cases et perd sans doute de son intéret ...
 
@@ -971,7 +1023,6 @@ class Game:
         # on a encore de la tune ? on essaie !
         self.protect_base()
         self.build_mines()
-
         self.train_units()
 
         # il reste de la tune ? on ajoute des tours :)
