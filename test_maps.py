@@ -299,14 +299,13 @@ def test_algo_capture_directe2():
     g.OpponentUnits.append(Unit(OPPONENT, 1, 1, 10, 10))
     g.hq = Point(0, 0)
     g.opponentHq = Point(11,11)
-    g.calcul_distance_map()
-    
     g.gold = 70
     g.income = 1 # doit pas jouer
     drawMap(g.map, "cd2-map")
 
-    startTime = time.time()
-    distanceMap= p.buildDistanceMap(g.map, Point(11, 11))
+    g.startTime = time.time()
+    g.calcul_distance_map()
+    distanceMap = p.buildDistanceMap(g.map, Point(11, 11))
     drawMap(distanceMap, "cd2-distance","defmap", "Temps de construction: "+str(time.time()-startTime))
 
     # mini check quand mm
@@ -317,3 +316,51 @@ def test_algo_capture_directe2():
     assert "TRAIN UNIT 1 9 9" in g.actions
     assert "TRAIN UNIT 2 10 10" in g.actions
     assert "TRAIN UNIT 1 11 11" in g.actions
+
+# Decoupage de l'armée adverse
+def test_algo_decoupe_ennemi():
+    g = Game()
+    p = Pathfinding()
+    
+    # attention, carte "inversée" visuellement ici 
+    g.map = [
+        ['O', 'O', 'O', '#', '#', '#', '#', '.', '.', '.', '.', '#'],
+        ['O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'X', 'X', 'X', '#'],
+        ['O', 'O', 'O', 'O', 'O', 'O', 'O', '.', 'X', 'X', 'X', '#'],
+        ['#', 'O', 'O', 'O', 'O', 'O', 'O', '.', 'X', 'X', 'X', '#'],
+        ['#', 'O', 'O', '.', 'O', 'O', '.', '.', 'X', 'X', 'X', '#'],
+        ['#', '.', '.', 'X', 'X', 'O', 'O', 'O', 'O', 'X', 'X', '#'],
+        ['#', '.', '.', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', '#'],
+        ['#', '.', '.', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', '#'],
+        ['#', '.', '.', '.', 'X', 'X', 'X', 'X', 'X', 'X', 'X', '#'],
+        ['#', '.', '.', '.', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X'],
+        ['#', '.', '.', '.', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X'],
+        ['#', '.', '.', '.', '.', '#', '#', '#', '#', 'X', 'X', 'X']
+    ]
+
+    g.units.append(Unit(ME, 1, 1, 5, 7))
+    g.OpponentUnits.append(Unit(OPPONENT, 1, 1, 1, 8))
+    g.OpponentUnits.append(Unit(OPPONENT, 1, 1, 1, 9))
+    g.OpponentUnits.append(Unit(OPPONENT, 1, 1, 1, 10))
+
+    g.OpponentUnits.append(Unit(OPPONENT, 1, 1, 6, 5))
+    g.OpponentUnits.append(Unit(OPPONENT, 1, 1, 6, 6))
+    g.OpponentUnits.append(Unit(OPPONENT, 1, 1, 6, 7))
+    g.hq = Point(0, 0)
+    g.opponentHq = Point(11,11)
+    g.gold   = 1000 #33
+    g.income = 27
+    g.tour = 30 # tour 30 !
+
+    drawMap(g.map, "decoupe1-map")
+
+    g.startTime = time.time()
+    assert g.calcul_decoupe_adversaire() is True
+
+    print(g.actions)
+    drawMap(g.map, "decoupe1-mapfinal")
+    assert "TRAIN UNIT 1 5 8" in g.actions
+    assert "TRAIN UNIT 1 5 9" in g.actions
+    assert "TRAIN UNIT 1 5 10" in g.actions
+
+

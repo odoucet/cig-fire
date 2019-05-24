@@ -2,6 +2,7 @@ import sys
 import time
 import copy
 import random
+import math
 
 # MAP SIZE
 WIDTH = 12
@@ -69,12 +70,11 @@ class Point:
         if (map[0][0] == ACTIVE):
             #                 droite              bas                 haut                 gauche               
             combinaisons = [  [self.x+1, self.y], [self.x, self.y+1] ]
-            random.shuffle(combinaisons)
             combinaisons.extend(([self.x, self.y-1],  [self.x-1, self.y]))
         else:
             combinaisons = [ [self.x-1, self.y], [self.x, self.y-1] ]
-            random.shuffle(combinaisons)
             combinaisons.extend( ([self.x+1, self.y], [self.x, self.y+1]))
+        
         for x,y in combinaisons:
             if x >= 0 and x < WIDTH and y >= 0 and y < HEIGHT:
                 if filtre is None or map[x][y] in filtre:
@@ -134,6 +134,10 @@ class Game:
 
         # spawnMap
         self.spawnMap = [ [ True for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
+
+        # le cache de decoupage
+        self.cacheCalculDecoupeX = [ None for x in range( WIDTH ) ]
+        self.cacheCalculDecoupeY = [ None for y in range( HEIGHT ) ]
 
         # coordonnées de notre QG (cache)
         self.hq = None
@@ -220,7 +224,7 @@ class Game:
             voisins = unit.getAdjacentes(self.map, [NEUTRE, INACTIVE, INACTIVEOPPONENT, ACTIVEOPPONENT])
             moved = False
             while moved is False and len(voisins) > 1:
-                voisin = random.choice(voisins)
+                voisin = voisins[0]
                 if self.can_spawn_level(voisin.x, voisin.y, unit.level):
                     self.actions.append(f'MOVE {unit.id} {voisin.x} {voisin.y}')
                     self.update_spawnMap()
@@ -321,20 +325,13 @@ class Game:
         casesANous = self.get_points_matching([ACTIVE])
         casesSpawn = []
 
-        # Premier tour
-        if len(casesANous) == 1:
-            if (self.map[0][0] == ACTIVE):
-                casesSpawn.extend([Point(1,0), Point(0,1)])
-            else:
-                casesSpawn.extend([Point(10,11), Point(11,10)])
-
         # On ajoute à ces cases là les inactives / neutres / ennemi
         for case in casesANous:
             # on peut optimiser en spawnant sur des cases actives de l'ennemi ? A tester
             casesSpawn.extend(case.getAdjacentes(self.map, [INACTIVE, INACTIVEOPPONENT, ACTIVEOPPONENT, NEUTRE]))
 
-        # et on deduplique
-        casesSpawn = self.get_opponent_HQ().sortNearest(list(dict.fromkeys(casesSpawn)))
+        # on maximise la zone autour de notre QG
+        casesSpawn = self.hq.sortNearest(list(dict.fromkeys(casesSpawn)))
 
         # ici on entraine que du niveau 1
         while len(casesSpawn) > 0 and self.gold >= Unit.TRAINING[1] and self.income >= Unit.ENTRETIEN[1]:
@@ -343,12 +340,12 @@ class Game:
 
             if self.spawnMap[case.x][case.y]:
                 self.actions.append(f'TRAIN 1 {case.x} {case.y}')
-                self.income -= Unit.ENTRETIEN[1]
+                # on baisse pas l'income, car on spawn sur une nouvelle case == rapporte 1 d'income
                 self.gold   -= Unit.TRAINING[1]
                 self.map[case.x][case.y] = ACTIVE # case prise maintenant donc on peut spawn les adjacentes :)
                 
                 casesSpawn.extend(case.getAdjacentes(self.map, [INACTIVE, INACTIVEOPPONENT, ACTIVEOPPONENT, NEUTRE]))
-                casesSpawn = self.get_opponent_HQ().sortNearest(list(dict.fromkeys(casesSpawn)))
+                casesSpawn = self.hq.sortNearest(list(dict.fromkeys(casesSpawn)))
 
     # Construction des mines
     # Seulement si on est en expansion de territoire, donc qu'il reste bcoup de NEUTRAL
@@ -477,7 +474,7 @@ class Game:
     def calcul_carte_defense(self):
         self.defenseMap = [ [ None for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
 
-        # Probleme de timeout, on verra apres
+        ############################################## Probleme de timeout, on verra apres #############################################
         return
 
         # si on a pas bcoup de cases en fait on s'en fout, soit c'est trop tôt, soit on est mort
@@ -601,9 +598,13 @@ class Game:
 
     # Return false if timeout near and we should stop what we are doing
     def check_timeout(self)-> bool:
-        if (time.time()-self.startTime) > 0.04:
+        if self.tour == 1:
+            timeout = 1
+        else:
+            timeout = 0.045
+        if (time.time() - self.startTime) > timeout:
             return True
-        return False 
+        return False
 
     # return True si une case est vide (personne dessus) et n'est pas un mur
     # EXCEPTION DU QG ADVERSE: c'est une case vide :p
@@ -647,7 +648,8 @@ class Game:
         self.nbMines = 0
         self.nbOpponentMines = 0
         self.spawnMap = [ [ True for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
-        self.cacheCalculDecoupe = [ [ None for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
+        self.cacheCalculDecoupeX = [ None for x in range( WIDTH ) ]
+        self.cacheCalculDecoupeY = [ None for y in range( HEIGHT ) ]
 
         for y in range(HEIGHT):
             line = input()
@@ -803,21 +805,34 @@ class Game:
     def calcul_decoupe_adversaire(self)->bool:
         scoresDecoupe = [] # on stockera un tableau avec [x => 4, score => 99] et on ordonnera par le champ score
 
-        # TODO: optim: sert à rien de découper avant le tour 10, on a pas la tune pour :)
+        # OPTIM: sert à rien de découper avant le tour 10, on a pas la tune pour :)
+        if self.tour < 10:
+            return False
 
         for x in range(4, 9):
             scoresDecoupe.append( {"x": x, "score": self.calcul_decoupe(x, None)} )
-        for y in range(4, 9):
+        for y in range(4, 9):           
             scoresDecoupe.append( {"y": y, "score": self.calcul_decoupe(None, y)} )
         
         # on ordonne les scores
         scores = sorted(scoresDecoupe, key = lambda i: i['score'], reverse=True)
 
-        #while len(scores) > 0:
-            # on applique
-            # TODO
+        debugPythonMap(scores)
+        
+        # on prend juste la meilleure :)
 
+        obj = scores.pop(0)
+        if hasattr(obj, 'x'):
+            sys.stderr.write(f"DecoupeX({obj.x})={obj.score}\n")
+            self.actions.extend(self.cacheCalculDecoupeX[obj.x])
+        elif hasattr(obj, 'y'):
+            sys.stderr.write(f"DecoupeX({obj.x})={obj.score}\n")
+            self.actions.extend(self.cacheCalculDecoupeY[obj.y])
+        
+        return True
 
+        # TODO: rejouer les actions TRAIN (en grepant ce qu'on fait), pour mettr à jour gold et income
+        # comme ça on peut encore spawn des unites apres :p
 
         # Fonction pas terminee
         return False
@@ -827,10 +842,11 @@ class Game:
         if x is None and y is None:
             return 0 # pas normal
         
-        # DEBUG
-        return 0
         # on en profite pour garder un tableau avec les operations. Comme on calcule, autant pas faire le taff deux fois
-        self.cacheCalculDecoupeX[x][y] = []
+        actions = []
+
+        # On part de notre unite et on incrémente vers la droite si on peut construire
+        costBuild = 0
 
         # on vérifie si la map est "facile"
         # donc pas de mur au milieu ou ce genre de trucs (bref, NEANT accepte qu'aux extremités)
@@ -841,13 +857,17 @@ class Game:
                 start += 1
 
             while self.map[x][end] == NEANT and end >= 0:
-                start -= 1
+                end -= 1
 
             if start == WIDTH-1 or end == 0:
                 # Toute la ligne pas bonne ? bizarre
                 sys.stderr.write(f"calcul_decoupe({x},{y}: ligne vide :(")
                 return 0
             
+            if self.check_timeout():
+                sys.stderr.write(f"TIMEOUT 872\n")
+                return
+
             # on verifie qu'on a pas de mur entre les deux
             for tmpy in range(start, end):
                 if self.map[x][tmpy] == NEANT:
@@ -865,11 +885,13 @@ class Game:
             if unitStart is None:
                 return 0
 
-            # On part de notre unite et on incrémente vers la droite si on peut construire
-            costBuild = 0
+            if self.check_timeout():
+                sys.stderr.write(f"TIMEOUT 895\n")
+                return
 
             # vers la droite, puis la gouche
-            for tmpy in (range(unitStart.y+1, WIDTH), range(unitStart.y-1, 0, -1)):
+            from itertools import chain
+            for tmpy in chain(range(unitStart.y+1, WIDTH), range(unitStart.y-1, 0, -1)):
                 # c'est déjà à nous ? 
                 if self.map[x][tmpy] == ACTIVE:
                     # on a la case, ça coute rien :)
@@ -879,19 +901,54 @@ class Game:
                 for level in [1, 2, 3]:
                     if (self.can_spawn_level(x, tmpy, level) and  
                     self.gold >= (Unit.TRAINING[level]) and self.income >= Unit.ENTRETIEN[level]):
-                        self.cacheCalculDecoupe[x][y].append(f"TRAIN {level} {x} {tmpy}")
+                        actions.append(f"TRAIN {level} {x} {tmpy}")
                         costBuild += Unit.TRAINING[level]
                         goodToGo = True
                 
                 # on peut pas :(
                 if goodToGo == False:
                     return 0
+            if costBuild == 0:
+                sys.stderr.write(f"({x}, none) COSTBUILD=0, ZARBI\n")
+                return 0
 
         # TODO: faire pareil quand 'y' est défini
+        else:
+            sys.stderr.write(f"PAS CODE POUR y={y}\n")
+            return 0
 
-        # TODO Calculer combien perd l'adversaire
+        # TODO: prendre en compte si l'ennemi a une tour dans la zone "découpée" : lui permet de garder des cases et perd sans doute de son intéret ...
 
-        return 0
+        # Calculer combien perd l'adversaire
+        argentPerdu = 0
+        cases = self.get_points_matching([ACTIVEOPPONENT])
+        for case in cases:
+            # si on decoupe en vertical:
+            if y is None and case.x <= x:
+                argentPerdu += 1
+
+            # si on découpe en horizontal
+            elif x is None and case.y <= y:
+                argentPerdu += 1
+
+        # Armee: 
+        for unit in self.OpponentUnits:
+            # si on decoupe en vertical:
+            if y is None and unit.x <= x:
+                argentPerdu += Unit.TRAINING[unit.level]
+
+            # si on découpe en horizontal
+            elif x is None and unit.y <= y:
+                argentPerdu += Unit.TRAINING[unit.level]
+
+        # on stock les actions
+        if y is None:
+            self.cacheCalculDecoupeX[x] = actions
+        elif y is None:
+            self.cacheCalculDecoupeY[y] = actions
+
+        # coût*2 < (tune perdue par l'adversaire)
+        return (argentPerdu/costBuild*2)
 
     def build_output(self):
         self.calcul_carte_defense()
@@ -903,9 +960,9 @@ class Game:
             return
 
         # Calcul si on peut decouper l'adversaire
-        #if self.calcul_decoupe_adversaire():
-        #    return
+        #self.calcul_decoupe_adversaire()
 
+        # on a encore de la tune ? on essaie !
         self.protect_base()
         self.build_mines()
 
@@ -922,6 +979,7 @@ class Game:
         else:
             print('WAIT')
         sys.stderr.write("Time spent in round #"+str(self.tour)+": "+str(self.getTotalTime())+"ms")
+        debugPythonMap(self.map)
 
     # get total time in ms
     def getTotalTime(self)-> int:
