@@ -1,6 +1,7 @@
 import sys
 import time
 import copy
+import random
 
 # MAP SIZE
 WIDTH = 12
@@ -63,8 +64,13 @@ class Point:
     # Retourne les cases adjacentes, avec un filtre 
     def getAdjacentes(self, map, filtre = None):
         cases = []
-        #                 gauche                   droite                 haut                    bas
-        combinaisons = [ [self.x-1, self.y], [self.x+1, self.y], [self.x, self.y-1], [self.x, self.y+1]]
+
+        # ON RETOURNE LES CASES EN PRIORITE: droite/bas si on commence en 0,0, gauche/HAUT sinon
+        if (map[0][0] == ACTIVE):
+            #                 droite              bas                 haut                 gauche               
+            combinaisons = [  [self.x+1, self.y], [self.x, self.y+1], [self.x, self.y-1],  [self.x-1, self.y]]
+        else:
+            combinaisons = [ [self.x-1, self.y], [self.x, self.y-1], [self.x+1, self.y], [self.x, self.y+1]]
         for x,y in combinaisons:
             if x >= 0 and x < WIDTH and y >= 0 and y < HEIGHT:
                 if filtre is None or map[x][y] in filtre:
@@ -165,16 +171,13 @@ class Game:
     def move_units(self):
         # on commence simple : on va a la case vide/adversaire la plus proche
 
-        # on recupere la liste des cases
-        casesVides = self.get_points_matching([NEUTRE, INACTIVEOPPONENT, ACTIVEOPPONENT])
-        
         # on bouge les unites au plus proche du QG ennemi d'abord
         for unit in self.get_opponent_HQ().sortNearest(self.units):
             # Defense ? 
             if unit.doNotMove == True:
                 continue
 
-            # Strategie Olivier: si niveau 3, on fonce sur l'adversaire / la tour / le batiment MINE le plus proche
+            # Strategie Olivier: si niveau 3, on fonce sur l'adversaire / la tour / le batiment le plus proche
             if unit.level == 3:
                 if not self.OpponentUnits: 
                     # on va sur la base ennemi
@@ -208,41 +211,40 @@ class Game:
             if doNotMove:
                 continue
             
-            # ici on devrait boucler jusqu'à trouver une bonne destination : 
-            # - pas déjà ciblée par une autre unité
-            # - 
-            destination = unit.nearest(casesVides)
-            if destination is not None: 
-                nextPos = self.get_next_pos(unit, destination)
-                if nextPos is None:
-                    # on peut pas y aller
-                    continue
-                
-                self.actions.append(f'MOVE {unit.id} {nextPos.x} {nextPos.y}')
-                # que quelqu'un d'autre n'y aille pas
-                casesVides.remove(destination)
-                self.update_spawnMap()
-                unit.x = nextPos.x
-                unit.y = nextPos.y
-                 # TODO: virer l'unite/building si y'a ...
-                self.map[nextPos.x][nextPos.y] = ACTIVE
-            else:
-                # destination == HQ ennemi ! 
-                destination = self.get_opponent_HQ()
-                nextPos = self.get_next_pos(unit, destination)
-                if nextPos is None:
-                    # on peut pas y aller
+            # on regarde si on a une case vide à proximité. On récupère les cases par priorité
+            voisins = unit.getAdjacentes(self.map, [NEUTRE, INACTIVE, INACTIVEOPPONENT, ACTIVEOPPONENT])
+            moved = False
+            while moved is False and len(voisins) > 1:
+                voisin = random.choice(voisins)
+                if self.can_spawn_level(voisin.x, voisin.y, unit.level):
+                    self.actions.append(f'MOVE {unit.id} {voisin.x} {voisin.y}')
+                    self.update_spawnMap()
+                    unit.x = voisin.x
+                    unit.y = voisin.y
+                    self.map[voisin.x][voisin.y] = ACTIVE
+                    moved = True
                     continue
 
-                self.actions.append(f'MOVE {unit.id} {nextPos.x} {nextPos.y}')
-                # que quelqu'un d'autre n'y aille pas
-                casesVides.remove(destination)
-                self.update_spawnMap()
-                unit.x = nextPos.x
-                unit.y = nextPos.y
-                 # TODO: virer l'unite/building si y'a ...
-                self.map[nextPos.x][nextPos.y] = ACTIVE
-                
+            if moved:
+                continue
+
+            # pas de voisin correct, on va donc à la case intéressante la plus proche
+            destination = unit.nearest(self.get_points_matching([NEUTRE, INACTIVE, INACTIVEOPPONENT, ACTIVEOPPONENT]))
+            if destination is not None: 
+                nextPos = self.get_next_pos(unit, destination)
+                if nextPos is not None:
+                    self.actions.append(f'MOVE {unit.id} {nextPos.x} {nextPos.y}')
+                    self.update_spawnMap()
+                    unit.x = nextPos.x
+                    unit.y = nextPos.y
+                    # TODO: virer l'unite/building si y'a ...
+                    self.map[nextPos.x][nextPos.y] = ACTIVE
+                    continue
+
+            # ici c'est vraiment qu'on peut rien faire :/
+            sys.stderr.write(f"Je peux absolument pas bouger #{unit.id}({unit.x},{unit.y})\n")
+
+            
 
     # Stratégie d'entrainement des unites
     # Les niveaux > 1 doivent se faire SUR un ennemi histoire de gagner du temps :)
@@ -358,6 +360,10 @@ class Game:
         for mine in self.get_my_HQ().sortNearest(self.mines): 
             # si on a assez d'argent et que la case est possédée, active et non occupée.
             if self.map[mine.x][mine.y] in [ACTIVE]: 
+                # si ennemi <= 3 cases, on construit pas
+                ennemi = mine.nearest(self.OpponentUnits)
+                if ennemi is not None and distance(ennemi, mine) <= 3:
+                    continue
                 # on verifie la tune et qu'on a personne dessus et pas de batiment
                 if self.gold >= 20+4*self.nbMines and self.spawnMap[mine.x][mine.y]: 
                     self.actions.append(f'BUILD MINE {mine.x} {mine.y}')
