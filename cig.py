@@ -229,8 +229,8 @@ class Game:
                     self.actions.append(f'MOVE {unit.id} {voisin.x} {voisin.y}')
                     unit.x = voisin.x
                     unit.y = voisin.y
-                    self.update_spawnMap()
                     self.map[voisin.x][voisin.y] = ACTIVE
+                    self.update_spawnMap()
                     moved = True
                     continue
 
@@ -245,9 +245,9 @@ class Game:
                     self.actions.append(f'MOVE {unit.id} {nextPos.x} {nextPos.y}')
                     unit.x = nextPos.x
                     unit.y = nextPos.y
+                    self.map[nextPos.x][nextPos.y] = ACTIVE
                     self.update_spawnMap()
                     # TODO: virer l'unite/building si y'a ...
-                    self.map[nextPos.x][nextPos.y] = ACTIVE
                     continue
 
             # ici c'est vraiment qu'on peut rien faire :/
@@ -279,6 +279,7 @@ class Game:
                     self.map[ennemi.x][ennemi.y] = ACTIVE # case prise maintenant :D
                     self.units.append(Unit(ME, 1, ennemi.level+1, ennemi.x, ennemi.y))
                     self.OpponentUnits.remove(ennemi) # on vire l'ennemi
+                    self.update_spawnMap()
             
             # Boucle 2 : est-ce qu'on peut dégommer une TOUR ennemie en spawnant un niveau 3 dessus ? ^^
             for ennemi in self.get_my_HQ().sortNearest(self.OpponentBuildings):
@@ -293,6 +294,7 @@ class Game:
                     self.map[ennemi.x][ennemi.y] = ACTIVE # case prise maintenant :D
                     self.units.append(Unit(ME, 1, 3, ennemi.x, ennemi.y))
                     self.OpponentBuildings.remove(ennemi) # on vire l'ennemi
+                    self.update_spawnMap()
 
             # Boucle 4: est-ce qu'on peut dégommer un niveau 1 en spawnant un 2 dessus ? 
             for ennemi in self.get_my_HQ().sortNearest(self.OpponentUnits):
@@ -311,6 +313,7 @@ class Game:
                             self.map[ennemi.x][ennemi.y] = ACTIVE # case prise maintenant :D
                             self.units.append(Unit(ME, 1, ennemi.level+1, ennemi.x, ennemi.y))
                             self.OpponentUnits.remove(ennemi) # on vire l'ennemi
+                            self.update_spawnMap()
                             break
             
         if self.check_timeout():
@@ -343,6 +346,7 @@ class Game:
                 # on baisse pas l'income, car on spawn sur une nouvelle case == rapporte 1 d'income
                 self.gold   -= Unit.TRAINING[1]
                 self.map[case.x][case.y] = ACTIVE # case prise maintenant donc on peut spawn les adjacentes :)
+                self.update_spawnMap()
                 
                 casesSpawn.extend(case.getAdjacentes(self.map, [INACTIVE, INACTIVEOPPONENT, ACTIVEOPPONENT, NEUTRE]))
                 casesSpawn = self.hq.sortNearest(list(dict.fromkeys(casesSpawn)))
