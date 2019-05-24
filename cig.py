@@ -397,24 +397,32 @@ class Game:
         # Algo v2: si distance < (goldEnnemi+income)/10
 
         if self.tourelleDefense == False:
-            ennemi = self.get_my_HQ().nearest(self.OpponentUnits)
-            if ennemi is not None and distance(ennemi, self.get_my_HQ()) <= (self.opponent_gold+self.opponent_income)/10:
-                if self.get_my_HQ().x == 0:
-                    positionTourelle = Point(2, 2)
-                else:
-                    positionTourelle = Point(9, 9)
-                
-                # faire gaffe si y'a une mine ...
-                for building in self.buildings:
-                    if building == positionTourelle:
-                        self.tourelleDefense = True
-                        break
-                if self.tourelleDefense == False:
+            ennemis = self.get_my_HQ().sortNearest(self.OpponentUnits)
+            # En fait, ce n'est pas le mec le plus proche forcément le plus dangereux, donc dans le doute on vérifie tout le monde !
+            for ennemi in ennemis: 
+                # on fait distance-1 car il pourra se déplacer d'une case avant de mener son attaque
+                if distance(ennemi, self.get_my_HQ())-1 <= (self.opponent_gold+self.opponent_income)/10:
+                    if self.get_my_HQ().x == 0:
+                        positionTourelle = Point(2, 2)
+                    else:
+                        positionTourelle = Point(9, 9)
+                    
+                    # faire gaffe si y'a une mine ...
+                    for building in self.buildings:
+                        if building == positionTourelle:
+                            if self.get_my_HQ().x == 0:
+                                positionTourelle = Point(1, 1)
+                            else:
+                                positionTourelle = Point(10, 10)
+                            break
+                    
                     self.tourelleDefense = True
                     self.actions.append(f'BUILD TOWER {positionTourelle.x} {positionTourelle.y}')
                     self.gold -= 15
                     self.buildings.append(Building(ME, TOWER, positionTourelle.x, positionTourelle.y))
-
+                    break
+                #else:
+                #    sys.stderr.write(f"protect_base sur ({ennemi.x},{ennemi.y}): distance={distance(ennemi, self.get_my_HQ())-1} > {(self.opponent_gold+self.opponent_income)/10}\n")
 
         # On essaie d'avoir des tourelles sur les super points (defenseMap >= 7)
         for x in range(WIDTH):
@@ -882,14 +890,15 @@ class Game:
 
             if start == WIDTH-1 or end == 0:
                 # Toute la ligne pas bonne ? bizarre
-                sys.stderr.write(f"calcul_decoupe({x},{y}: ligne vide :(")
+                #sys.stderr.write(f"calcul_decoupe({x},{y}: ligne vide :(")
                 return 0
 
             # on verifie qu'on a pas de mur entre les deux
+            # TODO: on verifie qu'on a TOUT ou que c'est neutral "AVANT" ou "APRES", et on change start/end en consequence
             for tmpy in range(start, end):
                 if self.map[x][tmpy] == NEANT:
                     # mur au milieu, par securite on fait pas
-                    sys.stderr.write(f"calcul_decoupe({x},{y}: mur au milieu")
+                    #sys.stderr.write(f"calcul_decoupe({x},{y}: mur au milieu")
                     return 0
 
             # - on regarde si on a une unite sur la ligne au moins
@@ -906,7 +915,7 @@ class Game:
             from itertools import chain
             for tmpy in chain(range(unitStart.y+1, end+1), range(unitStart.y-1, start, -1)):
                 # c'est déjà à nous ? 
-                if self.map[x][tmpy] in [ACTIVE, NEUTRE, INACTIVEOPPONENT, INACTIVE]:
+                if self.map[x][tmpy] in [ACTIVE, NEUTRE, INACTIVEOPPONENT, INACTIVE, NEANT]:
                     # on a la case, ça coute rien :)
                     continue
    
@@ -941,6 +950,7 @@ class Game:
                 return 0
 
             # on verifie qu'on a pas de mur entre les deux
+            # TODO: on verifie qu'on a TOUT ou que c'est neutral "AVANT" ou "APRES", et on change start/end en consequence
             for tmpx in range(start, end):
                 if self.map[tmpx][y] == NEANT:
                     # mur au milieu, par securite on fait pas
@@ -961,7 +971,7 @@ class Game:
             from itertools import chain
             for tmpx in chain(range(unitStart.x+1, end+1), range(unitStart.x-1, start, -1)):
                 # c'est déjà à nous ? 
-                if self.map[tmpx][y] in [ACTIVE, NEUTRE, INACTIVEOPPONENT, INACTIVE]:
+                if self.map[tmpx][y] in [ACTIVE, NEUTRE, INACTIVEOPPONENT, INACTIVE, NEANT]:
                     # on a la case, ça coute rien :)
                     continue
    
@@ -982,6 +992,10 @@ class Game:
                 return 0
             ######FIN DU COPIER COLLE DEGUEU ########
 
+        # si ca coute plus cher que ce qu'on a, ça sert à rien
+        if self.gold < costBuild:
+            sys.stderr.write(f"calcul_decoupe({x},{y}): cout {costBuild} > argent {self.gold}, on fait pas\n")
+            return 0
 
         # TODO: prendre en compte si l'ennemi a une tour dans la zone "découpée" : lui permet de garder des cases et perd sans doute de son intéret ...
         #sys.stderr.write(f"({x}, none) actions={actions}\n")
@@ -1014,8 +1028,9 @@ class Game:
         elif x is None:
             self.cacheCalculDecoupeY[y] = actions
 
-        # coût*2 < (tune perdue par l'adversaire)
-        return (argentPerdu/costBuild*2)
+        # coût < (tune perdue par l'adversaire)
+        sys.stderr.write(f"calcul_decoupe({x},{y}): argentPerdu={argentPerdu} costBuild={costBuild} start={start} end={end}\n")
+        return (argentPerdu/costBuild)
 
     def timingFunc(self, funcName):
         tmp = time.time()
@@ -1033,7 +1048,7 @@ class Game:
             return
 
         # Calcul si on peut decouper l'adversaire
-        self.calcul_decoupe_adversaire()
+        self.timingFunc(self.calcul_decoupe_adversaire)
 
         # on a encore de la tune ? on essaie !
         self.timingFunc(self.protect_base)

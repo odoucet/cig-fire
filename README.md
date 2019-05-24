@@ -26,6 +26,7 @@ Useful addons
 -------------
  * CG Enhancer : https://github.com/Azkellas/cgenhancer
  * CGSync
+ * CG Spunk : https://chrome.google.com/webstore/detail/cg-spunk/bkmddelokmckldmgeeiheohknodgaphi
 
 ToDo
 ----
