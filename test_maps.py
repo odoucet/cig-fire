@@ -329,7 +329,7 @@ def test_algo_decoupe_ennemi():
         ['O', 'O', 'O', 'O', 'O', 'O', 'O', '.', 'X', 'X', 'X', '#'],
         ['#', 'O', 'O', 'O', 'O', 'O', 'O', '.', 'X', 'X', 'X', '#'],
         ['#', 'O', 'O', '.', 'O', 'O', '.', '.', 'X', 'X', 'X', '#'],
-        ['#', '.', '.', 'X', 'X', 'O', 'O', 'O', 'O', 'X', 'X', '#'],
+        ['#', '.', '.', 'X', 'X', 'O', 'O', 'O', 'X', 'X', 'X', '#'],
         ['#', '.', '.', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', '#'],
         ['#', '.', '.', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', '#'],
         ['#', '.', '.', '.', 'X', 'X', 'X', 'X', 'X', 'X', 'X', '#'],
@@ -348,7 +348,7 @@ def test_algo_decoupe_ennemi():
     g.OpponentUnits.append(Unit(OPPONENT, 1, 1, 6, 7))
     g.hq = Point(0, 0)
     g.opponentHq = Point(11,11)
-    g.gold   = 1000 #33
+    g.gold   = 33
     g.income = 27
     g.tour = 30 # tour 30 !
 

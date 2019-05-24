@@ -202,10 +202,10 @@ class Game:
                 if nextPos is not None:
                     self.actions.append(f'MOVE {unit.id} {nextPos.x} {nextPos.y}')
                     self.map[nextPos.x][nextPos.y] = ACTIVE
-                    self.update_spawnMap()
                     # TODO: virer l'unite/building si y'a ...
                     unit.x = nextPos.x
                     unit.y = nextPos.y
+                    self.update_spawnMap()
                     continue
 
             # Si ennemi de mm niveau a coté on bouge pas
@@ -227,9 +227,9 @@ class Game:
                 voisin = voisins[0]
                 if self.can_spawn_level(voisin.x, voisin.y, unit.level):
                     self.actions.append(f'MOVE {unit.id} {voisin.x} {voisin.y}')
-                    self.update_spawnMap()
                     unit.x = voisin.x
                     unit.y = voisin.y
+                    self.update_spawnMap()
                     self.map[voisin.x][voisin.y] = ACTIVE
                     moved = True
                     continue
@@ -243,9 +243,9 @@ class Game:
                 nextPos = self.get_next_pos(unit, destination)
                 if nextPos is not None:
                     self.actions.append(f'MOVE {unit.id} {nextPos.x} {nextPos.y}')
-                    self.update_spawnMap()
                     unit.x = nextPos.x
                     unit.y = nextPos.y
+                    self.update_spawnMap()
                     # TODO: virer l'unite/building si y'a ...
                     self.map[nextPos.x][nextPos.y] = ACTIVE
                     continue
@@ -275,7 +275,7 @@ class Game:
                 self.gold >= (Unit.TRAINING[ennemi.level+1]) and self.income >= Unit.ENTRETIEN[ennemi.level+1]):
                     self.actions.append(f'TRAIN {ennemi.level+1} {ennemi.x} {ennemi.y}')
                     self.gold   -= Unit.TRAINING[ennemi.level+1]
-                    self.income -= Unit.ENTRETIEN[ennemi.level+1]
+                    self.income -= Unit.ENTRETIEN[ennemi.level+1] -1 # on prend une case, ça rapporte
                     self.map[ennemi.x][ennemi.y] = ACTIVE # case prise maintenant :D
                     self.units.append(Unit(ME, 1, ennemi.level+1, ennemi.x, ennemi.y))
                     self.OpponentUnits.remove(ennemi) # on vire l'ennemi
@@ -289,7 +289,7 @@ class Game:
                 self.gold >= (Unit.TRAINING[3]) and self.income >= Unit.ENTRETIEN[3]):
                     self.actions.append(f'TRAIN 3 {ennemi.x} {ennemi.y}')
                     self.gold   -= Unit.TRAINING[3]
-                    self.income -= Unit.ENTRETIEN[3]
+                    self.income -= Unit.ENTRETIEN[3]  -1 # on prend une case, ça rapporte
                     self.map[ennemi.x][ennemi.y] = ACTIVE # case prise maintenant :D
                     self.units.append(Unit(ME, 1, 3, ennemi.x, ennemi.y))
                     self.OpponentBuildings.remove(ennemi) # on vire l'ennemi
@@ -307,7 +307,7 @@ class Game:
                         self.gold >= (Unit.TRAINING[ennemi.level+1]) and self.income >= Unit.ENTRETIEN[ennemi.level+1]):
                             self.actions.append(f'TRAIN {ennemi.level+1} {ennemi.x} {ennemi.y}')
                             self.gold   -= Unit.TRAINING[ennemi.level+1]
-                            self.income -= Unit.ENTRETIEN[ennemi.level+1]
+                            self.income -= Unit.ENTRETIEN[ennemi.level+1] -1 # on prend une case, ça rapporte
                             self.map[ennemi.x][ennemi.y] = ACTIVE # case prise maintenant :D
                             self.units.append(Unit(ME, 1, ennemi.level+1, ennemi.x, ennemi.y))
                             self.OpponentUnits.remove(ennemi) # on vire l'ennemi
@@ -822,6 +822,11 @@ class Game:
         # on prend juste la meilleure :)
 
         obj = scores.pop(0)
+
+        # on veut au moins 1 au score: 
+        if obj.score < 1:
+            return False
+        
         if hasattr(obj, 'x'):
             sys.stderr.write(f"DecoupeX({obj.x})={obj.score}\n")
             self.actions.extend(self.cacheCalculDecoupeX[obj.x])
@@ -863,10 +868,6 @@ class Game:
                 # Toute la ligne pas bonne ? bizarre
                 sys.stderr.write(f"calcul_decoupe({x},{y}: ligne vide :(")
                 return 0
-            
-            if self.check_timeout():
-                sys.stderr.write(f"TIMEOUT 872\n")
-                return
 
             # on verifie qu'on a pas de mur entre les deux
             for tmpy in range(start, end):
@@ -884,16 +885,14 @@ class Game:
             
             if unitStart is None:
                 return 0
+            
+            sys.stderr.write(f"unitStart({unitStart.x},{unitStart.y}) start={start}, end={end}\n")
 
-            if self.check_timeout():
-                sys.stderr.write(f"TIMEOUT 895\n")
-                return
-
-            # vers la droite, puis la gouche
+            # vers la droite, puis la gauche
             from itertools import chain
-            for tmpy in chain(range(unitStart.y+1, WIDTH), range(unitStart.y-1, 0, -1)):
+            for tmpy in chain(range(unitStart.y+1, end+1), range(unitStart.y-1, start, -1)):
                 # c'est déjà à nous ? 
-                if self.map[x][tmpy] == ACTIVE:
+                if self.map[x][tmpy] in [ACTIVE, NEUTRE, INACTIVEOPPONENT, INACTIVE]:
                     # on a la case, ça coute rien :)
                     continue
    
@@ -904,6 +903,7 @@ class Game:
                         actions.append(f"TRAIN {level} {x} {tmpy}")
                         costBuild += Unit.TRAINING[level]
                         goodToGo = True
+                        break
                 
                 # on peut pas :(
                 if goodToGo == False:
@@ -918,6 +918,8 @@ class Game:
             return 0
 
         # TODO: prendre en compte si l'ennemi a une tour dans la zone "découpée" : lui permet de garder des cases et perd sans doute de son intéret ...
+
+        sys.stderr.write(f"({x}, none) actions={actions}\n")
 
         # Calculer combien perd l'adversaire
         argentPerdu = 0
