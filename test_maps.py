@@ -64,75 +64,75 @@ def drawMap(macarte, name, type="map", texte=None):
     r.save('tests/'+name+'.png', 'PNG')
 ## end raw
 
-def test_map_cas1(): 
-    g = Game()
-    # attention, carte "inversée" visuellement ici 
-    g.map = [
-        ['O', 'O', 'O', '#', '#', '#', 'O', 'O', 'O', 'O', 'O', '#'], 
-        ['O', 'O', 'O', '#', '#', 'O', 'O', 'O', 'O', 'O', 'O', 'O'], 
-        ['O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O'], 
-        ['#', '#', 'O', 'O', 'O', 'X', 'X', 'O', 'X', 'X', 'X', 'O'], 
-        ['#', 'O', 'O', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'O'], 
-        ['O', 'O', 'X', 'X', 'O', 'X', '.', 'X', 'X', 'X', '.', '.'], 
-        ['O', 'O', 'O', 'X', 'X', 'X', '.', 'X', 'X', 'X', '.', '.'], 
-        ['.', 'O', 'O', 'X', 'X', 'X', 'X', 'X', 'X', 'X', '.', '#'], 
-        ['.', '.', '.', 'X', 'X', 'X', 'X', 'X', 'X', 'X', '#', '#'], 
-        ['.', '.', '.', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X'], 
-        ['.', '.', 'X', 'X', 'X', 'X', 'X', '#', '#', 'X', 'X', 'X'], 
-        ['#', '.', 'X', 'X', 'X', '.', '#', '#', '#', 'X', 'X', 'X']]
-    # buildings:
-    g.hq = Point(0, 0)
-    g.opponentHq = Point(11,11)
-    g.calcul_distance_map()
-    #drawMap(g.map, "map")
+# def test_map_cas1(): 
+#     g = Game()
+#     # attention, carte "inversée" visuellement ici 
+#     g.map = [
+#         ['O', 'O', 'O', '#', '#', '#', 'O', 'O', 'O', 'O', 'O', '#'], 
+#         ['O', 'O', 'O', '#', '#', 'O', 'O', 'O', 'O', 'O', 'O', 'O'], 
+#         ['O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O'], 
+#         ['#', '#', 'O', 'O', 'O', 'X', 'X', 'O', 'X', 'X', 'X', 'O'], 
+#         ['#', 'O', 'O', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'O'], 
+#         ['O', 'O', 'X', 'X', 'O', 'X', '.', 'X', 'X', 'X', '.', '.'], 
+#         ['O', 'O', 'O', 'X', 'X', 'X', '.', 'X', 'X', 'X', '.', '.'], 
+#         ['.', 'O', 'O', 'X', 'X', 'X', 'X', 'X', 'X', 'X', '.', '#'], 
+#         ['.', '.', '.', 'X', 'X', 'X', 'X', 'X', 'X', 'X', '#', '#'], 
+#         ['.', '.', '.', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X'], 
+#         ['.', '.', 'X', 'X', 'X', 'X', 'X', '#', '#', 'X', 'X', 'X'], 
+#         ['#', '.', 'X', 'X', 'X', '.', '#', '#', '#', 'X', 'X', 'X']]
+#     # buildings:
+#     g.hq = Point(0, 0)
+#     g.opponentHq = Point(11,11)
+#     g.calcul_distance_map()
+#     #drawMap(g.map, "map")
     
-    g.startTime = time.time()
+#     g.startTime = time.time()
 
-    g.calcul_carte_defense()
-    #drawMap(g.defenseMap, "defensemap","map")
+#     g.calcul_carte_defense()
+#     #drawMap(g.defenseMap, "defensemap","map")
 
-    # Petite marge
-    #assert (time.time()-g.startTime) > 0.06
-    assert g.defenseMap[2][2] is not None and g.defenseMap[2][2] > 30
-    assert g.defenseMap[2][5] is not None and g.defenseMap[2][5] > 20
+#     # Petite marge
+#     #assert (time.time()-g.startTime) > 0.06
+#     assert g.defenseMap[2][2] is not None and g.defenseMap[2][2] > 30
+#     assert g.defenseMap[2][5] is not None and g.defenseMap[2][5] > 20
 
-### CAS NUMERO 2 ###
-def test_map_cas2(): 
-    g = Game()
+# ### CAS NUMERO 2 ###
+# def test_map_cas2(): 
+#     g = Game()
     
-    # attention, carte "inversée" visuellement ici 
-    g.map = [
-        ['O', 'O', 'O', '#', '#', '#', 'O', 'O', 'O', 'O', 'O', '#'], 
-        ['O', 'O', 'O', '#', '#', 'O', 'O', 'O', 'O', 'O', 'O', 'O'], 
-        ['O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O'], 
-        ['#', '#', 'O', 'O', 'O', 'x', 'O', 'O', 'O', 'O', 'O', 'O'], 
-        ['#', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O'], 
-        ['O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O'], 
-        ['O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O'], 
-        ['O', 'O', 'O', 'O', 'x', 'O', 'O', 'O', 'O', 'O', 'O', '#'], 
-        ['O', 'O', 'O', 'O', 'x', 'O', 'O', 'O', 'O', 'O', '#', '#'], 
-        ['.', '.', 'x', 'x', 'x', 'O', 'O', 'O', 'O', 'O', 'O', '.'], 
-        ['.', '.', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X'], 
-        ['#', '.', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X']
-    ]
+#     # attention, carte "inversée" visuellement ici 
+#     g.map = [
+#         ['O', 'O', 'O', '#', '#', '#', 'O', 'O', 'O', 'O', 'O', '#'], 
+#         ['O', 'O', 'O', '#', '#', 'O', 'O', 'O', 'O', 'O', 'O', 'O'], 
+#         ['O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O'], 
+#         ['#', '#', 'O', 'O', 'O', 'x', 'O', 'O', 'O', 'O', 'O', 'O'], 
+#         ['#', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O'], 
+#         ['O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O'], 
+#         ['O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O'], 
+#         ['O', 'O', 'O', 'O', 'x', 'O', 'O', 'O', 'O', 'O', 'O', '#'], 
+#         ['O', 'O', 'O', 'O', 'x', 'O', 'O', 'O', 'O', 'O', '#', '#'], 
+#         ['.', '.', 'x', 'x', 'x', 'O', 'O', 'O', 'O', 'O', 'O', '.'], 
+#         ['.', '.', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X'], 
+#         ['#', '.', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X']
+#     ]
 
-    # buildings:
-    g.hq = Point(0, 0)
-    g.opponentHq = Point(11,11)
-    g.calcul_distance_map()
-    drawMap(g.map, "map")
+#     # buildings:
+#     g.hq = Point(0, 0)
+#     g.opponentHq = Point(11,11)
+#     g.calcul_distance_map()
+#     drawMap(g.map, "map")
 
-    g.startTime = time.time()
-    g.calcul_carte_defense()
-    # on veut pas que la defenseMap prenne plus de 50ms
-    assert time.time()-g.startTime < 0.5
-    drawMap(g.defenseMap, "defensemap","defmap")
-    assert g.defenseMap[4][10] is not None and g.defenseMap[4][10] == 1
+#     g.startTime = time.time()
+#     g.calcul_carte_defense()
+#     # on veut pas que la defenseMap prenne plus de 50ms
+#     assert time.time()-g.startTime < 0.5
+#     drawMap(g.defenseMap, "defensemap","defmap")
+#     assert g.defenseMap[4][10] is not None and g.defenseMap[4][10] == 1
     
 
 
-### CAS NUMERO 3 ###
-def test_map_cas3(): 
+# ### CAS NUMERO 3 ###
+# def test_map_cas3(): 
     g = Game()
     
     # attention, carte "inversée" visuellement ici 
@@ -306,16 +306,16 @@ def test_algo_capture_directe2():
     g.startTime = time.time()
     g.calcul_distance_map()
     distanceMap = p.buildDistanceMap(g.map, Point(11, 11))
-    drawMap(distanceMap, "cd2-distance","defmap", "Temps de construction: "+str(time.time()-startTime))
+    drawMap(distanceMap, "cd2-distance","defmap", "Temps de construction: "+str(time.time()-g.startTime))
 
     # mini check quand mm
     assert distanceMap[8][9] == 5
 
     assert g.calcul_capture_directe() is True
     # ensuite on verifie les actions
-    assert "TRAIN UNIT 1 9 9" in g.actions
-    assert "TRAIN UNIT 2 10 10" in g.actions
-    assert "TRAIN UNIT 1 11 11" in g.actions
+    assert "TRAIN 1 9 9" in g.actions
+    assert "TRAIN 2 10 10" in g.actions
+    assert "TRAIN 1 11 11" in g.actions
 
 # Decoupage de l'armée adverse
 def test_algo_decoupe_ennemi():

@@ -224,7 +224,7 @@ class Game:
             voisins = unit.getAdjacentes(self.map, [NEUTRE, INACTIVE, INACTIVEOPPONENT, ACTIVEOPPONENT])
             moved = False
             while moved is False and len(voisins) > 1:
-                voisin = voisins[0]
+                voisin = voisins.pop(0)
                 if self.can_spawn_level(voisin.x, voisin.y, unit.level):
                     self.actions.append(f'MOVE {unit.id} {voisin.x} {voisin.y}')
                     unit.x = voisin.x
@@ -602,7 +602,7 @@ class Game:
 
     # Return false if timeout near and we should stop what we are doing
     def check_timeout(self)-> bool:
-        if self.tour == 1:
+        if self.tour <= 1:
             timeout = 1
         else:
             timeout = 0.045
@@ -699,6 +699,10 @@ class Game:
         # NOTE: distanceMap est une variable *GLOBALE* (oui c'est mal)
         if distanceMap[0][0] is None:
             self.calcul_distance_map()
+
+        # de la marge sur l'income après le tour 10 pour pas se mettre à sec
+        if self.tour >= 10:
+            self.income -= 15
 
     def update_spawnMap(self):
         # carte des spawns, avec les positions sur lesquelles on peut spawn (cases vides): 
