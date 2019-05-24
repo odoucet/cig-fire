@@ -251,7 +251,7 @@ class Game:
                     self.units.append(Unit(ME, 1, ennemi.level+1, ennemi.x, ennemi.y))
                     self.OpponentUnits.remove(ennemi) # on vire l'ennemi
             
-            # Boucle 2 : est-ce qu'on peut dégommer une TOUR ennemies en spawnant un niveau 3 dessus ? ^^
+            # Boucle 2 : est-ce qu'on peut dégommer une TOUR ennemie en spawnant un niveau 3 dessus ? ^^
             for ennemi in self.get_my_HQ().sortNearest(self.OpponentBuildings):
                 if ennemi.type != TOWER:
                     continue
@@ -284,40 +284,43 @@ class Game:
                             self.OpponentUnits.remove(ennemi) # on vire l'ennemi
                             break
             
-        else:
-            # on garde l'algo (pas terrible) qu'on a déjà, pour le moment
-            # TODO: optimiser ça :)
-            casesANous = self.get_points_matching([ACTIVE])
-            casesSpawn = []
+        # Et si il reste de la tune: 
+        if self.gold < 10 or self.income == 0:
+            return
+            
+        # on garde l'algo (pas terrible) qu'on a déjà, pour le moment
+        # TODO: optimiser ça :)
+        casesANous = self.get_points_matching([ACTIVE])
+        casesSpawn = []
 
-            # Premier tour
-            if len(casesANous) == 1:
-                if (self.map[0][0] == ACTIVE):
-                    casesSpawn.extend([Point(1,0), Point(0,1)])
-                else:
-                    casesSpawn.extend([Point(10,11), Point(11,10)])
+        # Premier tour
+        if len(casesANous) == 1:
+            if (self.map[0][0] == ACTIVE):
+                casesSpawn.extend([Point(1,0), Point(0,1)])
+            else:
+                casesSpawn.extend([Point(10,11), Point(11,10)])
 
-            # On ajoute à ces cases là les inactives / neutres / ennemi
-            for case in casesANous:
-                # on peut optimiser en spawnant sur des cases actives de l'ennemi ? A tester
+        # On ajoute à ces cases là les inactives / neutres / ennemi
+        for case in casesANous:
+            # on peut optimiser en spawnant sur des cases actives de l'ennemi ? A tester
+            casesSpawn.extend(case.getAdjacentes(self.map, [INACTIVE, INACTIVEOPPONENT, ACTIVEOPPONENT, NEUTRE]))
+
+        # et on deduplique
+        casesSpawn = self.get_opponent_HQ().sortNearest(list(dict.fromkeys(casesSpawn)))
+
+        # ici on entraine que du niveau 1
+        while len(casesSpawn) > 0 and self.gold >= Unit.TRAINING[1] and self.income >= Unit.ENTRETIEN[1]:
+            # on entraine sur une case à nous, la plus proche du QG adverse
+            case = casesSpawn.pop(0)
+
+            if self.spawnMap[case.x][case.y]:
+                self.actions.append(f'TRAIN 1 {case.x} {case.y}')
+                self.income -= Unit.ENTRETIEN[1]
+                self.gold   -= Unit.TRAINING[1]
+                self.map[case.x][case.y] = ACTIVE # case prise maintenant donc on peut spawn les adjacentes :)
+                
                 casesSpawn.extend(case.getAdjacentes(self.map, [INACTIVE, INACTIVEOPPONENT, ACTIVEOPPONENT, NEUTRE]))
-
-            # et on deduplique
-            casesSpawn = self.get_opponent_HQ().sortNearest(list(dict.fromkeys(casesSpawn)))
-
-            # ici on entraine que du niveau 1
-            while len(casesSpawn) > 0 and self.gold >= Unit.TRAINING[1] and self.income >= Unit.ENTRETIEN[1]:
-                # on entraine sur une case à nous, la plus proche du QG adverse
-                case = casesSpawn.pop(0)
-
-                if self.spawnMap[case.x][case.y]:
-                    self.actions.append(f'TRAIN 1 {case.x} {case.y}')
-                    self.income -= Unit.ENTRETIEN[1]
-                    self.gold   -= Unit.TRAINING[1]
-                    self.map[case.x][case.y] = ACTIVE # case prise maintenant donc on peut spawn les adjacentes :)
-                    
-                    casesSpawn.extend(case.getAdjacentes(self.map, [INACTIVE, INACTIVEOPPONENT, ACTIVEOPPONENT, NEUTRE]))
-                    casesSpawn = self.get_opponent_HQ().sortNearest(list(dict.fromkeys(casesSpawn)))
+                casesSpawn = self.get_opponent_HQ().sortNearest(list(dict.fromkeys(casesSpawn)))
 
     # Construction des mines
     # Seulement si on est en expansion de territoire, donc qu'il reste bcoup de NEUTRAL
@@ -481,7 +484,7 @@ class Game:
             nbCasesANous = 0
             for x in range(currentCase.x-1, currentCase.x+2):
                 for y in range(currentCase.y-1, currentCase.y+2):
-                    if x >= 0 and x <= WIDTH and y >= 0 and y <= HEIGHT:
+                    if x >= 0 and x < WIDTH and y >= 0 and y < HEIGHT:
                         if self.map[x][y] in [ACTIVE, NEUTRE, NEANT]:
                             nbCasesANous += 1
                     else:
