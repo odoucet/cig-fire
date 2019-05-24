@@ -121,6 +121,9 @@ class Game:
         # init carte du jeu
         self.map = [ [ None for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
 
+        # spawnMap
+        self.spawnMap = [ [ True for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
+
         # coordonnées de notre QG (cache)
         self.hq = None
         # coordonnées du QG ennemi (cache)
@@ -187,6 +190,7 @@ class Game:
                 if nextPos is not None:
                     self.actions.append(f'MOVE {unit.id} {nextPos.x} {nextPos.y}')
                     self.map[nextPos.x][nextPos.y] = ACTIVE
+                    self.update_spawnMap()
                     # TODO: virer l'unite/building si y'a ...
                     unit.x = nextPos.x
                     unit.y = nextPos.y
@@ -217,6 +221,7 @@ class Game:
                 self.actions.append(f'MOVE {unit.id} {nextPos.x} {nextPos.y}')
                 # que quelqu'un d'autre n'y aille pas
                 casesVides.remove(destination)
+                self.update_spawnMap()
                 unit.x = nextPos.x
                 unit.y = nextPos.y
                  # TODO: virer l'unite/building si y'a ...
@@ -224,7 +229,20 @@ class Game:
             else:
                 # destination == HQ ennemi ! 
                 destination = self.get_opponent_HQ()
-                self.actions.append(f'MOVE {unit.id} {destination.x} {destination.y}')
+                nextPos = self.get_next_pos(unit, destination)
+                if nextPos is None:
+                    # on peut pas y aller
+                    continue
+
+                self.actions.append(f'MOVE {unit.id} {nextPos.x} {nextPos.y}')
+                # que quelqu'un d'autre n'y aille pas
+                casesVides.remove(destination)
+                self.update_spawnMap()
+                unit.x = nextPos.x
+                unit.y = nextPos.y
+                 # TODO: virer l'unite/building si y'a ...
+                self.map[nextPos.x][nextPos.y] = ACTIVE
+                
 
     # Stratégie d'entrainement des unites
     # Les niveaux > 1 doivent se faire SUR un ennemi histoire de gagner du temps :)
@@ -287,7 +305,7 @@ class Game:
         # Et si il reste de la tune: 
         if self.gold < 10 or self.income == 0:
             return
-            
+
         # on garde l'algo (pas terrible) qu'on a déjà, pour le moment
         # TODO: optimiser ça :)
         casesANous = self.get_points_matching([ACTIVE])
@@ -609,6 +627,7 @@ class Game:
         self.opponent_income = int(input())
         self.nbMines = 0
         self.nbOpponentMines = 0
+        self.spawnMap = [ [ True for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
 
         for y in range(HEIGHT):
             line = input()
@@ -655,7 +674,7 @@ class Game:
         if distanceMap[0][0] is None:
             self.calcul_distance_map()
 
-        # TODO: deplacer ça dans une fonction pour ecrire le test qui va bien :)
+    def update_spawnMap(self):
         # carte des spawns, avec les positions sur lesquelles on peut spawn (cases vides): 
         self.spawnMap = [ [ True for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
         # on enleve les cases impossibles:
