@@ -470,7 +470,6 @@ class Game:
             x, y = [int(j) for j in input().split()]
             self.mines.append(Mine(x, y))
 
-
     # Construction d'une carte avec les points de defense importants chez nous
     # Pour se faire, pour chaque case à nous on calcule notre surface si on la perd
     # On va s'en servir pour mettre des tourelles par exemple
