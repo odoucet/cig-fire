@@ -68,9 +68,13 @@ class Point:
         # ON RETOURNE LES CASES EN PRIORITE: droite/bas si on commence en 0,0, gauche/HAUT sinon
         if (map[0][0] == ACTIVE):
             #                 droite              bas                 haut                 gauche               
-            combinaisons = [  [self.x+1, self.y], [self.x, self.y+1], [self.x, self.y-1],  [self.x-1, self.y]]
+            combinaisons = [  [self.x+1, self.y], [self.x, self.y+1] ]
+            random.shuffle(combinaisons)
+            combinaisons.extend(([self.x, self.y-1],  [self.x-1, self.y]))
         else:
-            combinaisons = [ [self.x-1, self.y], [self.x, self.y-1], [self.x+1, self.y], [self.x, self.y+1]]
+            combinaisons = [ [self.x-1, self.y], [self.x, self.y-1] ]
+            random.shuffle(combinaisons)
+            combinaisons.extend( ([self.x+1, self.y], [self.x, self.y+1]))
         for x,y in combinaisons:
             if x >= 0 and x < WIDTH and y >= 0 and y < HEIGHT:
                 if filtre is None or map[x][y] in filtre:
@@ -117,6 +121,7 @@ class Game:
         self.opponent_income = 0
         self.nbMines = 0
         self.nbOpponentMines = 0
+        self.tour = 0
 
         # Si on a posé notre tourelle de défense en 2,2 ou 9,9
         self.tourelleDefense = False
@@ -304,6 +309,9 @@ class Game:
                             self.OpponentUnits.remove(ennemi) # on vire l'ennemi
                             break
             
+        if self.check_timeout():
+            return
+
         # Et si il reste de la tune: 
         if self.gold < 10 or self.income == 0:
             return
@@ -469,6 +477,9 @@ class Game:
     def calcul_carte_defense(self):
         self.defenseMap = [ [ None for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
 
+        # Probleme de timeout, on verra apres
+        return
+
         # si on a pas bcoup de cases en fait on s'en fout, soit c'est trop tôt, soit on est mort
         # pareil si on possede toute la carte
         nbCasesANous = len(self.get_points_matching([ACTIVE]))
@@ -590,7 +601,7 @@ class Game:
 
     # Return false if timeout near and we should stop what we are doing
     def check_timeout(self)-> bool:
-        if (time.time()-self.startTime) > 0.05:
+        if (time.time()-self.startTime) > 0.04:
             return True
         return False 
 
@@ -625,6 +636,8 @@ class Game:
         self.buildings.clear()
         self.OpponentBuildings.clear()
         self.actions.clear()
+
+        self.tour += 1
 
         self.gold = int(input())
         self.startTime = time.time()
@@ -752,13 +765,14 @@ class Game:
                     # on verifie que la case est vide
                     # TODO: améliorer ici pour chercher plsieurs chemins ...
                     if distance(voisin, self.get_opponent_HQ()) == currentDistance-1:
-                        if self.case_vide(voisin.x, voisin.y):
-                            currentPos = voisin
-                            currentDistance -= 1
-                            currentGold -= 10
-                            found = True
-                            actions.append(f'TRAIN 1 {voisin.x} {voisin.y}')
-                            break
+                        for level in [1, 2, 3]:
+                            if self.can_spawn_level(voisin.x, voisin.y, level):
+                                currentPos = voisin
+                                currentDistance -= 1
+                                currentGold -= Unit.TRAINING[level]
+                                found = True
+                                actions.append(f'TRAIN {level} {voisin.x} {voisin.y}')
+                                break
                         # ici on teste si y'a un mec de niveau 2 ou 3 qu'on peut butter
 
 
@@ -813,8 +827,10 @@ class Game:
         if x is None and y is None:
             return 0 # pas normal
         
+        # DEBUG
+        return 0
         # on en profite pour garder un tableau avec les operations. Comme on calcule, autant pas faire le taff deux fois
-        self.cacheCalculDecoupe[x][y] = []
+        self.cacheCalculDecoupeX[x][y] = []
 
         # on vérifie si la map est "facile"
         # donc pas de mur au milieu ou ce genre de trucs (bref, NEANT accepte qu'aux extremités)
@@ -887,15 +903,17 @@ class Game:
             return
 
         # Calcul si on peut decouper l'adversaire
-        if self.calcul_decoupe_adversaire():
-            return
+        #if self.calcul_decoupe_adversaire():
+        #    return
 
         self.protect_base()
         self.build_mines()
+
         self.train_units()
 
         # il reste de la tune ? on ajoute des tours :)
-        self.build_towers()
+        if not self.check_timeout():
+            self.build_towers()
 
 
     def output(self):
@@ -903,7 +921,7 @@ class Game:
             print(';'.join(self.actions))
         else:
             print('WAIT')
-        sys.stderr.write("Time spent in this round: "+str(self.getTotalTime())+"ms")
+        sys.stderr.write("Time spent in round #"+str(self.tour)+": "+str(self.getTotalTime())+"ms")
 
     # get total time in ms
     def getTotalTime(self)-> int:
