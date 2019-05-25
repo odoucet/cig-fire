@@ -191,24 +191,26 @@ class Game:
         return casesVides
 
     # Met à jour la position d'une unité (putain de pass-by-reference-mais-en-fait-non en Python)
-    def update_unit_pos(self, owner, id, position: Point):
+    def update_unit_pos(self, owner, myId, position: Point)->bool:
         if owner == ME:
             for unit in self.units:
-                if unit.id == id:
+                if unit.id == myId:
                     unit.x = position.x
                     unit.y = position.y
                     self.map[position.x][position.y] = ACTIVE
                     self.update_spawnMap()
-                    return
+                    return True
 
         if owner == OPPONENT:
             for unit in self.OpponentUnits:
-                if unit.id == id:
+                if unit.id == myId:
                     unit.x = position.x
                     unit.y = position.y
                     self.map[position.x][position.y] = ACTIVEOPPONENT
                     self.update_spawnMap()
-                    return
+                    return True
+        debugMsg(f"update_unit_pos({owner}, {myId}, {position})=FALSE")
+        return False
 
 
     # Spawn une unité de niveau level en (x,y). 
@@ -260,10 +262,11 @@ class Game:
                 nextPos = self.get_next_pos(unit, destination)
                 if nextPos is not None:
                     self.actions.append(f'MOVE {unit.id} {nextPos.x} {nextPos.y}')
+                    debugMsg(f"#{unit.id}{unit} se deplace sur {nextPos}")
                     # virer l'unite/building si y'a
-                    for unit in self.OpponentUnits:
-                        if unit == nextPos:
-                            self.OpponentUnits.remove(unit)
+                    for tmpunit in self.OpponentUnits:
+                        if tmpunit == nextPos:
+                            self.OpponentUnits.remove(tmpunit)
                             break
                     for building in self.OpponentBuildings:
                         if building == nextPos:
@@ -304,10 +307,6 @@ class Game:
             if destination is not None: 
                 nextPos = self.get_next_pos(unit, destination)
                 if nextPos is not None:
-                    #debug:
-                    if unit.id == 3:
-                        debugMsg(f"L260 nextPos={nextPos} , currentLevel={unit.level}")
-
                     self.actions.append(f'MOVE {unit.id} {nextPos.x} {nextPos.y}')
                     self.update_unit_pos(ME, unit.id, nextPos)
 
@@ -820,8 +819,9 @@ class Game:
 
         obj = scores.pop(0)
 
-        # on veut au moins 1 au score: 
-        if obj['score'] < 1:
+        # Si le score est de 1, alors ça coute aussi cher que ce que l'adversaire perd.
+        # on veut quand même une petite rentabilité sur l'histoire: 
+        if obj['score'] < 1.3:
             return False
         
         actions = []
@@ -857,43 +857,39 @@ class Game:
         actions = []
 
         # Calculer combien perd l'adversaire. C'est le plus simple, ça permet de voir si ça a un intérêt
-        # TODO: prendre en compte si l'ennemi a une tour dans la zone "découpée" : lui permet de garder des cases et perd sans doute de son intéret ...
         argentPerdu = 0
         cases = self.get_points_matching([ACTIVEOPPONENT])
         for case in cases:
             # si on decoupe en vertical + HQ(0,0):
-            if self.hq.x == 0 and y is None and case.x <= x:
-                argentPerdu += 1
-
             # si on découpe en horizontal + HQ(0,0):
-            elif self.hq.x == 0 and x is None and case.y <= y:
-                argentPerdu += 1
-
-            # si on decoupe en vertical + HQ(1,11):
-            if self.hq.x == 11 and y is None and case.x >= x:
-                argentPerdu += 1
-
+            # si on decoupe en vertical + HQ(11,11):
             # si on découpe en horizontal + HQ(11,11):
-            elif self.hq.x == 11 and x is None and case.y >= y:
+            if ((self.hq.x == 0 and y is None and case.x <= x) or (self.hq.x == 0 and x is None and case.y <= y) or 
+            (self.hq.x == 11 and y is None and case.x >= x) or (self.hq.x == 11 and x is None and case.y >= y)):
                 argentPerdu += 1 
 
         # Armee: 
         for unit in self.OpponentUnits:
             # si on decoupe en vertical + HQ(0,0):
-            if self.hq.x == 0 and y is None and unit.x <= x:
-                argentPerdu += Unit.TRAINING[unit.level]
-
             # si on découpe en horizontal + HQ(0,0):
-            elif self.hq.x == 0 and x is None and unit.y <= y:
-                argentPerdu += Unit.TRAINING[unit.level]
-            
             # si on decoupe en vertical + HQ(11,11):
-            if self.hq.x == 11 and y is None and unit.x >= x:
+            # si on découpe en horizontal + HQ(11,11):
+            if ((self.hq.x == 0 and y is None and unit.x <= x) or (self.hq.x == 0 and x is None and unit.y <= y) or 
+            (self.hq.x == 11 and y is None and unit.x >= x) or (self.hq.x == 11 and x is None and unit.y >= y)):
                 argentPerdu += Unit.TRAINING[unit.level]
 
+        # les batiments (mine = perdu, tourelle = garde la case)
+        for building in self.OpponentBuildings:
+            # si on decoupe en vertical + HQ(0,0):
+            # si on découpe en horizontal + HQ(0,0):
+            # si on decoupe en vertical + HQ(11,11):
             # si on découpe en horizontal + HQ(11,11):
-            elif self.hq.x == 11 and x is None and unit.y >= y:
-                argentPerdu += Unit.TRAINING[unit.level]
+            if ((self.hq.x == 0 and y is None and building.x <= x) or (self.hq.x == 0 and x is None and building.y <= y) or 
+            (self.hq.x == 11 and y is None and building.x >= x) or (self.hq.x == 11 and x is None and building.y >= y)):
+                if building.type == TOWER:
+                    argentPerdu -= 1 # il va garder la tour
+                else:
+                    argentPerdu += 24 # on est conservateur, en vrai il peut perdre davantage !
 
         # on veut qu'il perde au moins deux unites ou une T2
         if argentPerdu < 20:
