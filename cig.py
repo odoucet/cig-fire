@@ -385,9 +385,54 @@ class Game:
         if self.gold < 10 or self.income == 0:
             return
 
+
+        # on va essayer de faire qque chose d'utile :
+        # option 1 : blitzkrieg
+        # option 2 : grandir par défaut
+        casesANous = self.get_points_matching([ACTIVE])
+        casesSpawn = []
+
+        # BLITZKRIEG !!
+        # l'idée est de casser la ligne de front qu'on pêut avoir au tour 10
+        # en créant une ligne de 2 ou 3 unités dans le territoire ennemi
+        # il nous faut aussi un peu d'éco avant de le tenter
+        if self.tour >= 10 and self.gold >= 45:
+            # récupérer les cases où on peut spawn et qui sont en contact avec celles de l'adversaire
+            for case in casesANous:
+                # on peut optimiser en spawnant sur des cases actives de l'ennemi ? A tester
+                casesSpawn.extend(case.getAdjacentes(self.map, [ACTIVEOPPONENT]))
+                casesSpawn = self.opponentHq.sortNearest(list(dict.fromkeys(casesSpawn)))
+
+            # en partant de la plus proche du QG adverse, on regarde si on peut poser une unité T2 et ensuite 2x T1
+            for case in casesSpawn:
+                if self.can_spawn_level(case.x, case.y, 2):
+                    debugMsg("Blitzkrieg en cours")
+                    self.spawn_unit(2, case.x, case.y)                                  # SPAWN 1
+
+                    casesAdj = case.getAdjacentes(self.map, [ACTIVEOPPONENT])
+                    casesAdj = self.opponentHq.sortNearest(list(dict.fromkeys(casesAdj)))
+
+                    for cell in casesAdj:
+                        if self.can_spawn_level(cell.x, cell.y, 1):
+                            self.spawn_unit(1, cell.x, cell.y)                          # SPAWN 2
+
+                            casesAdj_2 = case.getAdjacentes(self.map, [ACTIVEOPPONENT])
+                            casesAdj_2 = self.opponentHq.sortNearest(list(dict.fromkeys(casesAdj)))
+
+                            for c in casesAdj_2:
+                                if self.can_spawn_level(c.x, c.y, 1):
+                                    self.spawn_unit(1, c.x, c.y)                        # SPAWN 3
+                                    break
+
+                            break
+
+                    # on arrête car on ne le fait qu'une blitzkrieg par tour
+                    break
+
+
+
         # on garde l'algo (pas terrible) qu'on a déjà, pour le moment
         # TODO: optimiser ça :)
-        casesANous = self.get_points_matching([ACTIVE])
         casesSpawn = []
 
         # On ajoute à ces cases là les inactives / neutres / ennemi
@@ -407,6 +452,16 @@ class Game:
                 self.spawn_unit(1, case.x, case.y)
                 casesSpawn.extend(case.getAdjacentes(self.map, [INACTIVE, INACTIVEOPPONENT, ACTIVEOPPONENT, NEUTRE]))
                 casesSpawn = self.hq.sortNearest(list(dict.fromkeys(casesSpawn)))
+
+    # def spawn_unit(self, x, y, level):
+    #     self.actions.append(f'TRAIN {level} {x} {y}')
+    #     self.gold -= Unit.TRAINING[level]
+    #     self.income -= Unit.ENTRETIEN[level]
+    #     # si c'est une case qui n'était pas à nous, alors on augmente l'income
+    #     if self.map[x][y] != ACTIVE:
+    #         self.income += 1
+    #     self.map[x][y] = ACTIVE  # case prise maintenant donc on peut spawn les adjacentes :)
+    #     self.update_spawnMap()
 
     # Construction des mines
     # Seulement si on est en expansion de territoire, donc qu'il reste bcoup de NEUTRAL
