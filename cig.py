@@ -618,16 +618,37 @@ class Game:
             return # si on est à la bourre en éco on va garder notre tune
         
         debugMsg("on essaie de poser une nouvelle tour")
-        for case in self.get_opponent_HQ().sortNearest(self.get_points_matching([ACTIVE])):
-            condition = self.can_spawn_level(case.x, case.y, 1) is True and distance(case, case.nearest(self.buildings)) >= 3 and case not in self.mines
-            debugMsg(f"")
-            if self.OpponentUnits:
-                condition = condition and distance(case, case.nearest(self.OpponentUnits)) <= 2
-            if condition:
-                self.actions.append(f'BUILD TOWER {case.x} {case.y}')
-                self.gold -= 15
-                # une par tour max
-                return
+
+        for case in self.hq.sortNearest(self.get_points_matching([ACTIVEOPPONENT])):
+
+            for cell in self.hq.sortNearest(case.getAdjacentes(self.map, [ACTIVE])):
+
+                if self.can_spawn_level(cell.x, cell.y, 1) is True and distance(cell, cell.nearest(
+                        self.buildings)) >= 3 and cell not in self.mines:
+                    self.actions.append(f'BUILD TOWER {cell.x} {cell.y}')
+                    self.gold -= 15
+                    # une par tour max
+                    return
+            for cell in self.hq.sortNearest(case.getAdjacentes(self.map, [ACTIVE])):
+                for c in self.hq.sortNearest(cell.getAdjacentes(self.map, [ACTIVE])):
+
+                    if self.can_spawn_level(c.x, c.y, 1) is True and distance(c, c.nearest(
+                            self.buildings)) >= 3 and c not in self.mines:
+                        self.actions.append(f'BUILD TOWER {c.x} {c.y}')
+                        self.gold -= 15
+                        # une par tour max
+                        return
+
+        # for case in self.get_opponent_HQ().sortNearest(self.get_points_matching([ACTIVE])):
+        #     condition = self.can_spawn_level(case.x, case.y, 1) is True and distance(case, case.nearest(self.buildings)) >= 3 and case not in self.mines
+        #     debugMsg(f"")
+        #     if self.OpponentUnits:
+        #         condition = condition and distance(case, case.nearest(self.OpponentUnits)) <= 2
+        #     if condition:
+        #         self.actions.append(f'BUILD TOWER {case.x} {case.y}')
+        #         self.gold -= 15
+        #         # une par tour max
+        #         return
 
 
     # Return false if timeout near and we should stop what we are doing
