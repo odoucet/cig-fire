@@ -138,8 +138,8 @@ class Game:
         self.nbUnit = [None, 0, 0, 0]
         self.nbOpponentUnit = [None, 0, 0, 0]
 
-        # Si on a posé notre tourelle de défense en 2,2 ou 9,9
-        self.tourelleDefense = False
+        # Nbre de tourelle de défense (notamment en 2,2 ou 9,9)
+        self.tourelleDefense = 0
 
         # les positions de defenses, avec des unites dedans à ne pas toucher
         self.defensePositions = []
@@ -332,7 +332,7 @@ class Game:
             # on la joue defense: on spawn sur les mecs qui nous mettent en danger
             for ennemi in self.get_my_HQ().sortNearest(self.OpponentUnits):
                 # si on a trop de niveau 3 on sort
-                if self.nbOpponentUnit[3]-self.nbUnit[3] >= Unit.STRAT_MAX[3]:
+                if self.nbUnit[3]-self.nbOpponentUnit[3] >= Unit.STRAT_MAX[3]:
                     break
 
                 if ennemi.level == 1:
@@ -354,8 +354,12 @@ class Game:
                     continue
 
                 # si on a trop de niveau 3 on sort
-                if self.nbOpponentUnit[3]-self.nbUnit[3] >= Unit.STRAT_MAX[3]:
+                if self.nbUnit[3]-self.nbOpponentUnit[3] >= Unit.STRAT_MAX[3]:
                     break
+                
+                # on veut pas de tours trop proches du bord ...
+                if ennemi.x <= 2 or ennemi.x >= 9 or ennemi.y <= 2 or ennemi.y >= 9:
+                    continue
                 
                 if (len(ennemi.getAdjacentes(self.map, [ACTIVE])) > 0 and 
                 self.gold >= (Unit.TRAINING[3]) and self.income >= Unit.ENTRETIEN[3]):
@@ -366,15 +370,17 @@ class Game:
                 if ennemi.level > 1:
                     continue
                 
-
                 if len(ennemi.getAdjacentes(self.map, [ACTIVE])) > 0:
-                    # deux boucles: si on peut faire du niveau 2, ou du niveau 3
-                    for level in range(min(3, ennemi.level+1), 3):
+                    curLevel = ennemi.level+1
+
+                    # deux boucles: si on peut faire du niveau 2, ou du niveau 3 (si protégé par une tourelle par ex.)
+                    for level in range(min(3, curLevel), 3):
                         if (self.can_spawn_level(ennemi.x, ennemi.y, level) and 
-                        self.gold >= (Unit.TRAINING[ennemi.level+1]) and self.income >= Unit.ENTRETIEN[ennemi.level+1]):
+                        self.gold >= (Unit.TRAINING[curLevel]) and self.income >= Unit.ENTRETIEN[curLevel]):
                             # on verifie de pas en spawn trop
-                            if self.nbOpponentUnit[3]-self.nbUnit[3] < Unit.STRAT_MAX[3]:
-                                self.spawn_unit(ennemi.level+1, ennemi.x, ennemi.y)
+                            if self.nbUnit[curLevel]-self.nbOpponentUnit[curLevel] < Unit.STRAT_MAX[curLevel]:
+                                debugMsg(f"verif_spawn_unit curLevel={curLevel} ({self.nbUnit[curLevel]}-{self.nbOpponentUnit[curLevel]} < {Unit.STRAT_MAX[curLevel]})")
+                                self.spawn_unit(curLevel, ennemi.x, ennemi.y)
                                 break
             
         if self.check_timeout():
@@ -505,35 +511,34 @@ class Game:
         # certains joueurs le font.
         # Algo v2: si distance < (goldEnnemi+income)/10
 
-        if self.tourelleDefense == False:
-            ennemis = self.get_my_HQ().sortNearest(self.OpponentUnits)
-            # En fait, ce n'est pas le mec le plus proche forcément le plus dangereux, donc dans le doute on vérifie tout le monde !
-            for ennemi in ennemis: 
-                # on fait distance-1 car il pourra se déplacer d'une case avant de mener son attaque
+        ennemis = self.get_my_HQ().sortNearest(self.OpponentUnits)
+        # En fait, ce n'est pas le mec le plus proche forcément le plus dangereux, donc dans le doute on vérifie tout le monde !
+        for ennemi in ennemis: 
+            # on fait distance-1 car il pourra se déplacer d'une case avant de mener son attaque
+            # on ajoute 30 de "coût" pour chaque tourelle défensive qu'on a : 
+            coutCapture = (distance(ennemi, self.get_my_HQ())-1)*10 + self.tourelleDefense * 30
+            if coutCapture <= (self.opponent_gold+self.opponent_income):
+                debugMsg("MODE PANIQUE, L'ENNEMI PEUT NOUS DEBORDER !")
 
-                # On force le mieux avant de calculer quelque chose de bien. Avant 2,2 et 9,9
-                if distance(ennemi, self.get_my_HQ())-1 <= (self.opponent_gold+self.opponent_income)/10:
-                    if self.get_my_HQ().x == 0:
-                        positionTourelle = Point(1, 1)
-                    else:
-                        positionTourelle = Point(10, 10)
+                if self.get_my_HQ().x == 0:
+                    positionsTourelle = [ Point(1, 1), Point(2,1), Point(3, 2) ]
+                else:
+                    positionsTourelle = [ Point(10, 10), Point(9, 10), Point(8, 9) ]
+                
+                tourellesNeeded = math.floor((self.opponent_gold+self.opponent_income-coutCapture)/30)
+                tourellesPosees = 0
+                for tourelle in positionsTourelle:
+                    # on l'a déjà ?
+                    if tourelle in self.buildings:
+                        continue
                     
-                    # faire gaffe si y'a une mine ...
-                    for building in self.buildings:
-                        if building == positionTourelle:
-                            if self.get_my_HQ().x == 0:
-                                positionTourelle = Point(1, 1)
-                            else:
-                                positionTourelle = Point(10, 10)
-                            break
-                    
-                    self.tourelleDefense = True
-                    self.actions.append(f'BUILD TOWER {positionTourelle.x} {positionTourelle.y}')
+                    tourellesPosees += 1
+                    self.tourelleDefense += 1 # todo: verifier au debut de chaque tour ?
+                    self.actions.append(f'BUILD TOWER {tourelle.x} {tourelle.y}')
                     self.gold -= 15
-                    self.buildings.append(Building(ME, TOWER, positionTourelle.x, positionTourelle.y))
-                    break
-                #else:
-                #    sys.stderr.write(f"protect_base sur ({ennemi.x},{ennemi.y}): distance={distance(ennemi, self.get_my_HQ())-1} > {(self.opponent_gold+self.opponent_income)/10}\n")
+                    self.buildings.append(Building(ME, TOWER, tourelle.x, tourelle.y))
+                    if tourellesPosees == tourellesNeeded or self.gold < 15:
+                        break
 
 
 
@@ -612,8 +617,10 @@ class Game:
         if self.income < self.opponent_income:
             return # si on est à la bourre en éco on va garder notre tune
         
+        debugMsg("on essaie de poser une nouvelle tour")
         for case in self.get_opponent_HQ().sortNearest(self.get_points_matching([ACTIVE])):
             condition = self.can_spawn_level(case.x, case.y, 1) is True and distance(case, case.nearest(self.buildings)) >= 3 and case not in self.mines
+            debugMsg(f"")
             if self.OpponentUnits:
                 condition = condition and distance(case, case.nearest(self.OpponentUnits)) <= 2
             if condition:
