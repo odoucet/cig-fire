@@ -889,9 +889,10 @@ class Game:
         if self.tour < 10:
             return False
 
-        for x in range(4, 9):
+        # attention avec range(), x va aller de 3 à 10-1: 
+        for x in range(3, 10):
             scoresDecoupe.append( {"x": x, "score": self.calcul_decoupe(x, None)} )
-        for y in range(4, 9):           
+        for y in range(3, 10):           
             scoresDecoupe.append( {"y": y, "score": self.calcul_decoupe(None, y)} )
         
         # on ordonne les scores
