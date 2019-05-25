@@ -613,8 +613,10 @@ class Game:
             return # si on est à la bourre en éco on va garder notre tune
         
         for case in self.get_opponent_HQ().sortNearest(self.get_points_matching([ACTIVE])):
-            if (self.can_spawn_level(case.x, case.y, 1) is True and distance(case, case.nearest(self.buildings)) >= 3 and 
-                case not in self.mines and distance(case, case.nearest(self.OpponentUnits)) <= 2):
+            condition = self.can_spawn_level(case.x, case.y, 1) is True and distance(case, case.nearest(self.buildings)) >= 3 and case not in self.mines
+            if self.OpponentUnits:
+                condition = condition and distance(case, case.nearest(self.OpponentUnits)) <= 2
+            if condition:
                 self.actions.append(f'BUILD TOWER {case.x} {case.y}')
                 self.gold -= 15
                 # une par tour max
