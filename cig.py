@@ -95,6 +95,10 @@ class Unit (Point):
     TRAINING  = [ 0, 10, 20, 30]
     ENTRETIEN = [ 0, 1, 4, 20 ]
 
+    # Nbre max d'unités d'avance sur l'ennemi
+    #                T1  T2 T3
+    STRAT_MAX = [ 0, 99, 2, 1]
+
     def __init__(self, owner: int, id: int, level: int, x: int, y: int):
         self.owner = owner
         self.id = id
@@ -130,6 +134,9 @@ class Game:
         self.nbMines = 0
         self.nbOpponentMines = 0
         self.tour = 0
+        self.protectLevel = 10
+        self.nbUnit = [None, 0, 0, 0]
+        self.nbOpponentUnit = [None, 0, 0, 0]
 
         # Si on a posé notre tourelle de défense en 2,2 ou 9,9
         self.tourelleDefense = False
@@ -204,6 +211,33 @@ class Game:
                     return
 
 
+    # Spawn une unité de niveau level en (x,y). 
+    # NE VERIFIE PAS SI C'EST POSSIBLE, ça le "fait" et ça met à jour ce qu'il faut, c'est tout.
+    def spawn_unit(self, level, x, y):
+        self.actions.append(f'TRAIN {level} {x} {y}')
+        self.gold   -= Unit.TRAINING[level]
+        self.income -= Unit.ENTRETIEN[level] -1 # on prend une case, ça rapporte 1
+        self.map[x][y] = ACTIVE # case prise maintenant :D
+        self.units.append(Unit(ME, 1, level, x, y))
+        self.nbUnit[level] += 1
+
+        # si on a un ennemi de niveau inf sur la case, on le butte, sinon petite erreur ...
+        for ennemi in self.OpponentUnits:
+            if ennemi == Point(x, y):
+                if ennemi.level < level or level == 3:
+                    self.OpponentUnits.remove(ennemi)
+                    break
+                else:
+                    self.actions.append(f"MSG ERREUR DE SPAWN A VERIFIER")
+        for building in self.OpponentBuildings:
+            if building == Point(x, y):
+                if building.type == TOWER and level != 3:
+                    self.actions.append(f"MSG ERREUR DE SPAWN SUR BUILDING A VERIFIER")
+                self.OpponentBuildings.remove(building)
+        
+        # mise à jour de la carte
+        self.update_spawnMap()
+
     # Strategie de deplacement des unites (Olivier)
     # un truc que la règle ne dit pas de facon claire : si un soldat est sur une case inactive, il meurt !
     def move_units(self):
@@ -276,6 +310,7 @@ class Game:
 
                     self.actions.append(f'MOVE {unit.id} {nextPos.x} {nextPos.y}')
                     self.update_unit_pos(ME, unit.id, nextPos)
+
                     # TODO: virer l'unite/building si y'a ...
                     continue
 
@@ -297,6 +332,10 @@ class Game:
             # Boucle 1: est-ce qu'on peut dégommer des niveaux 2 ou 3 en spawnant dessus ?
             # on la joue defense: on spawn sur les mecs qui nous mettent en danger
             for ennemi in self.get_my_HQ().sortNearest(self.OpponentUnits):
+                # si on a trop de niveau 3 on sort
+                if self.nbOpponentUnit[3]-self.nbUnit[3] >= Unit.STRAT_MAX[3]:
+                    break
+
                 if ennemi.level == 1:
                     # petite merde, on te considère même pas!
                     continue
@@ -307,49 +346,37 @@ class Game:
                 # plus rapide que can_spawn_level() car niveau 3 fait ce qu'il veut, nananère
                 if (len(ennemi.getAdjacentes(self.map, [ACTIVE])) > 0 and 
                 self.gold >= (Unit.TRAINING[3]) and self.income >= Unit.ENTRETIEN[3]):
-                    self.actions.append(f'TRAIN 3 {ennemi.x} {ennemi.y}')
-                    self.gold   -= Unit.TRAINING[3]
-                    self.income -= Unit.ENTRETIEN[3] -1 # on prend une case, ça rapporte
-                    self.map[ennemi.x][ennemi.y] = ACTIVE # case prise maintenant :D
-                    self.units.append(Unit(ME, 1, 3, ennemi.x, ennemi.y))
-                    self.OpponentUnits.remove(ennemi) # on vire l'ennemi
-                    self.update_spawnMap()
+                    self.spawn_unit(3, ennemi.x, ennemi.y)
                     #debugMsg(f"Spawn Unit3({ennemi}) sur la tronche de {ennemi.id}")
             
             # Boucle 2 : est-ce qu'on peut dégommer une TOUR ennemie en spawnant un niveau 3 dessus ? ^^
             for ennemi in self.get_my_HQ().sortNearest(self.OpponentBuildings):
                 if ennemi.type != TOWER:
                     continue
+
+                # si on a trop de niveau 3 on sort
+                if self.nbOpponentUnit[3]-self.nbUnit[3] >= Unit.STRAT_MAX[3]:
+                    break
                 
                 if (len(ennemi.getAdjacentes(self.map, [ACTIVE])) > 0 and 
                 self.gold >= (Unit.TRAINING[3]) and self.income >= Unit.ENTRETIEN[3]):
-                    self.actions.append(f'TRAIN 3 {ennemi.x} {ennemi.y}')
-                    self.gold   -= Unit.TRAINING[3]
-                    self.income -= Unit.ENTRETIEN[3]  -1 # on prend une case, ça rapporte
-                    self.map[ennemi.x][ennemi.y] = ACTIVE # case prise maintenant :D
-                    self.units.append(Unit(ME, 1, 3, ennemi.x, ennemi.y))
-                    self.OpponentBuildings.remove(ennemi) # on vire l'ennemi
-                    self.update_spawnMap()
+                    self.spawn_unit(3, ennemi.x, ennemi.y)
 
             # Boucle 4: est-ce qu'on peut dégommer un niveau 1 en spawnant un 2 dessus ? 
             for ennemi in self.get_my_HQ().sortNearest(self.OpponentUnits):
                 if ennemi.level > 1:
                     continue
-                # debug:seed=5862311708367631400
+                
 
                 if len(ennemi.getAdjacentes(self.map, [ACTIVE])) > 0:
                     # deux boucles: si on peut faire du niveau 2, ou du niveau 3
                     for level in range(min(3, ennemi.level+1), 3):
                         if (self.can_spawn_level(ennemi.x, ennemi.y, level) and 
                         self.gold >= (Unit.TRAINING[ennemi.level+1]) and self.income >= Unit.ENTRETIEN[ennemi.level+1]):
-                            self.actions.append(f'TRAIN {ennemi.level+1} {ennemi.x} {ennemi.y}')
-                            self.gold   -= Unit.TRAINING[ennemi.level+1]
-                            self.income -= Unit.ENTRETIEN[ennemi.level+1] -1 # on prend une case, ça rapporte
-                            self.map[ennemi.x][ennemi.y] = ACTIVE # case prise maintenant :D
-                            self.units.append(Unit(ME, 1, ennemi.level+1, ennemi.x, ennemi.y))
-                            self.OpponentUnits.remove(ennemi) # on vire l'ennemi
-                            self.update_spawnMap()
-                            break
+                            # on verifie de pas en spawn trop
+                            if self.nbOpponentUnit[3]-self.nbUnit[3] < Unit.STRAT_MAX[3]:
+                                self.spawn_unit(ennemi.level+1, ennemi.x, ennemi.y)
+                                break
             
         if self.check_timeout():
             debugMsg("TIMEOUT in move_units() apres boucle 4")
@@ -378,12 +405,7 @@ class Game:
             case = casesSpawn.pop(0)
 
             if self.can_spawn_level(case.x, case.y, 1):
-                self.actions.append(f'TRAIN 1 {case.x} {case.y}')
-                # on baisse pas l'income, car on spawn sur une nouvelle case == rapporte 1 d'income
-                self.gold   -= Unit.TRAINING[1]
-                self.map[case.x][case.y] = ACTIVE # case prise maintenant donc on peut spawn les adjacentes :)
-                self.update_spawnMap()
-                
+                self.spawn_unit(1, case.x, case.y)
                 casesSpawn.extend(case.getAdjacentes(self.map, [INACTIVE, INACTIVEOPPONENT, ACTIVEOPPONENT, NEUTRE]))
                 casesSpawn = self.hq.sortNearest(list(dict.fromkeys(casesSpawn)))
 
@@ -484,9 +506,7 @@ class Game:
                 # on spawn un level superieur
                 if unit.level == 3:
                     unit.level = 2 # on fait style, on va spawn un level+1
-                self.actions.append(f'TRAIN {unit.level+1} {spawnPoint.x} {spawnPoint.y}')
-                self.gold   -= Unit.TRAINING[unit.level+1]
-                self.income -= Unit.ENTRETIEN[unit.level+1]
+                self.spawn_unit(unit.level+1, spawnPoint.x, spawnPoint.y)
                 self.defensePositions.append(spawnPoint)
 
 
@@ -520,37 +540,32 @@ class Game:
             if self.gold < 15:
                 return
 
-            if self.defenseMap[case.x][case.y] >= 10:
+            if self.defenseMap[case.x][case.y] >= self.protectLevel:
                 # on peut poser ?
                 # une tour c'est comme une unité de niveau 1:p
-                # TODO: verifier si on a une tourelle pas loin
+                # on evite de poser trop près d'une tour déjà à nous
                 if self.can_spawn_level(case.x, case.y, 1) is True and distance(case, case.nearest(self.buildings)) >= 3 and case not in self.mines:
-                    debugMsg(f"BUILDTOWER({case}) spawnMap={self.spawnMap[case.x][case.y]}")
                     self.actions.append(f'BUILD TOWER {case.x} {case.y}')
                     self.gold -= 15
                     # une par tour max
                     return
-
-
-    # Construction de tours avec la tune restante
-    def build_towers(self):
-        if self.gold < 50:
+        
+        # Toujours pas, 2e pass ?
+        if self.gold < 15:
             return
-
-        # on cherche une case à nous pas loin du QG ennemi (dist <= 5)
-        towerCases = self.get_opponent_HQ().sortNearest( self.get_points_matching([ACTIVE]) )
-        for case in towerCases:
-            # tune ? 
-            if self.gold < 50:
-                break
-            
-            if distance(case, self.get_opponent_HQ()) > 5:
-                break
-
-            # check construction
-            if self.spawnMap[case.x][case.y]:
+        
+        # on pause une tour au plus près du front possible (une par tour pour voir déjà)
+        if self.income < self.opponent_income:
+            return # si on est à la bourre en éco on va garder notre tune
+        
+        for case in self.get_opponent_HQ().sortNearest(self.get_points_matching([ACTIVE])):
+            if (self.can_spawn_level(case.x, case.y, 1) is True and distance(case, case.nearest(self.buildings)) >= 3 and 
+                case not in self.mines and distance(case, case.nearest(self.OpponentUnits)) <= 2):
                 self.actions.append(f'BUILD TOWER {case.x} {case.y}')
                 self.gold -= 15
+                # une par tour max
+                return
+
 
     # Return false if timeout near and we should stop what we are doing
     def check_timeout(self)-> bool:
@@ -603,8 +618,12 @@ class Game:
         self.opponent_income = int(input())
         self.nbMines = 0
         self.nbOpponentMines = 0
+
         self.cacheCalculDecoupeX = [ None for x in range( WIDTH ) ]
         self.cacheCalculDecoupeY = [ None for y in range( HEIGHT ) ]
+
+        self.nbUnit = [None, 0, 0, 0]
+        self.nbOpponentUnit = [None, 0, 0, 0]
 
         for y in range(HEIGHT):
             line = input()
@@ -634,6 +653,7 @@ class Game:
             owner, unit_id, level, x, y = [int(j) for j in input().split()]
             if (owner == ME):
                 obj = Unit(owner, unit_id, level, x, y)
+                self.nbUnit[level] += 1
 
                 # On defend ?
                 for defensePoint in self.defensePositions:
@@ -642,6 +662,7 @@ class Game:
                 self.units.append(obj)
             else:
                 self.OpponentUnits.append(Unit(owner, unit_id, level, x, y))
+                self.nbOpponentUnit[level] += 1
 
         # spawnMap
         self.update_spawnMap()
@@ -803,29 +824,25 @@ class Game:
         if obj['score'] < 1:
             return False
         
+        actions = []
         if 'x' in obj:
             sys.stderr.write(f"DecoupeX({obj['x']})={obj['score']}\n")
-            self.actions.extend(self.cacheCalculDecoupeX[obj['x']])
+            actions = self.cacheCalculDecoupeX[obj['x']]
         elif 'y' in obj:
             sys.stderr.write(f"DecoupeY({obj['y']})={obj['score']}\n")
-            self.actions.extend(self.cacheCalculDecoupeY[obj['y']])
+            actions = self.cacheCalculDecoupeY[obj['y']]
         else:
-            self.actions.append(f"ERROR: CODE INVALIDE EXECUTE") # que ce soit un peu visuel ...
+            self.actions.append(f"MSG ERROR CODE INVALIDE EXECUTE") # que ce soit un peu visuel ...
         
-        # On rejoue les actions TRAIN (en grepant ce qu'on fait), pour mettr à jour gold et income
+        # On boucle sur les actions pour les faire réellement (en grepant ce qu'on fait), pour mettre à jour gold et income
         # comme ça on peut encore spawn des unites apres :p
-        for action in self.actions:
+        for action in actions:
             match = TRAIN_PATTERN.match(action)
             if match is not None:
                 level = int(match.group(1))
                 x = int(match.group(2))
                 y = int(match.group(3))
-                self.gold   -= Unit.TRAINING[level]
-                self.income -= Unit.ENTRETIEN[level] -1 # on prend une case, ça rapporte
-                self.map[x][y] = ACTIVE # case prise maintenant :D
-                self.units.append(Unit(ME, 1, level, x, y))
-                #todo: virer les adversaires qu'on a écrasé lamentablement
-        self.update_spawnMap()
+                self.spawn_unit(level, x, y)
 
         return True
 
@@ -1089,17 +1106,21 @@ class Game:
         self.timingFunc(self.calcul_decoupe_adversaire)
 
         # Tourelles défensives
+        self.protectLevel = 10
         if self.tour >= 10:
             self.timingFunc(self.pose_tourelle)
 
-        # on a encore de la tune ? on essaie !
+        # tourelle spécifique de défense
         self.timingFunc(self.protect_base)
+
+
         self.timingFunc(self.build_mines)
         self.timingFunc(self.train_units)
 
-        # il reste de la tune ? on ajoute des tours :)
+        # il reste de la tune ? on ajoute des tours en étant moins regardant
+        self.protectLevel = 5
         if not self.check_timeout():
-            self.timingFunc(self.build_towers)
+            self.timingFunc(self.pose_tourelle)
 
 
     def output(self):

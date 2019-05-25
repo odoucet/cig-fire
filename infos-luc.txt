@@ -2,3 +2,5 @@ Infos pour 25/05:
 
 - hésite pas à tester nos algos qd on commence en bas à droite
 - j'ai repris l'algo defense_map pour essayer de pauser des tourelles à des endroits stratégiques, y'a des choses à faire dedans !
+
+A FAIRE : coder une petite fonction spawn_unit(x,y,lvl) qui crée l'unité et fait les mises à jour qui vont bien
