@@ -191,21 +191,25 @@ class Game:
 
             # Strategie Olivier: si niveau 3, on fonce sur l'adversaire / la tour / le batiment le plus proche
             if unit.level == 3:
-                if not self.OpponentUnits: 
-                    # on va sur la base ennemi
-                    destination = self.get_opponent_HQ()
-                else:
-                    # on va taper de l'unité / du batiment ennemi
-                    # TODO: on peut optimiser ici car le QG est forcément un building ennemi
-                    tmpEnnemi = self.OpponentUnits.copy()
-                    tmpEnnemi.extend(self.OpponentBuildings)
-                    destination = unit.nearest(tmpEnnemi)
+                # on va taper de l'unité / du batiment ennemi
+                tmpEnnemi = self.OpponentUnits.copy()
+                tmpEnnemi.extend(self.OpponentBuildings)
+                destination = unit.nearest(tmpEnnemi)
 
                 nextPos = self.get_next_pos(unit, destination)
                 if nextPos is not None:
                     self.actions.append(f'MOVE {unit.id} {nextPos.x} {nextPos.y}')
                     self.map[nextPos.x][nextPos.y] = ACTIVE
-                    # TODO: virer l'unite/building si y'a ...
+                    # virer l'unite/building si y'a
+                    for unit in self.OpponentUnits:
+                        if unit == nextPos:
+                            self.OpponentUnits.remove(unit)
+                            break
+                    for building in self.OpponentBuildings:
+                        if building == nextPos:
+                            self.OpponentBuildings.remove(building)
+                            break
+                    # maj de notre position
                     unit.x = nextPos.x
                     unit.y = nextPos.y
                     self.update_spawnMap()
@@ -254,7 +258,7 @@ class Game:
                     continue
 
             # ici c'est vraiment qu'on peut rien faire :/
-            sys.stderr.write(f"Je peux absolument pas bouger #{unit.id}({unit.x},{unit.y})\n")
+            sys.stderr.write(f"move_units#{unit.id}({unit.x},{unit.y}), destination({destination}) impossible\n")
 
             
 
@@ -268,10 +272,11 @@ class Game:
             # Boucle 1: est-ce qu'on peut dégommer des niveaux 2 ou 3 en spawnant dessus ?
             # on la joue defense: on spawn sur les mecs qui nous mettent en danger
             for ennemi in self.get_my_HQ().sortNearest(self.OpponentUnits):
-                if ennemi.level < 2:
+                if ennemi.level == 1:
+                    # petite merde, on te considère même pas!
                     continue
-                if ennemi.level == 3:
-                    # on considere qu'il est 2 car on va l'écraser avec un 3
+                else:
+                    # on considere qu'il est forcément 2 car on va l'écraser avec un 3
                     ennemi.level = 2
                 
                 if (len(ennemi.getAdjacentes(self.map, [ACTIVE])) > 0 and 
@@ -320,6 +325,7 @@ class Game:
                             break
             
         if self.check_timeout():
+            debugMsg("TIMEOUT in move_units() apres boucle 4")
             return
 
         # Et si il reste de la tune: 
@@ -401,11 +407,13 @@ class Game:
             # En fait, ce n'est pas le mec le plus proche forcément le plus dangereux, donc dans le doute on vérifie tout le monde !
             for ennemi in ennemis: 
                 # on fait distance-1 car il pourra se déplacer d'une case avant de mener son attaque
+
+                # On force le mieux avant de calculer quelque chose de bien. Avant 2,2 et 9,9
                 if distance(ennemi, self.get_my_HQ())-1 <= (self.opponent_gold+self.opponent_income)/10:
                     if self.get_my_HQ().x == 0:
-                        positionTourelle = Point(2, 2)
+                        positionTourelle = Point(1, 1)
                     else:
-                        positionTourelle = Point(9, 9)
+                        positionTourelle = Point(10, 10)
                     
                     # faire gaffe si y'a une mine ...
                     for building in self.buildings:
@@ -424,26 +432,6 @@ class Game:
                 #else:
                 #    sys.stderr.write(f"protect_base sur ({ennemi.x},{ennemi.y}): distance={distance(ennemi, self.get_my_HQ())-1} > {(self.opponent_gold+self.opponent_income)/10}\n")
 
-        # On essaie d'avoir des tourelles sur les super points (defenseMap >= 7)
-        for x in range(WIDTH):
-            for y in range(HEIGHT): 
-                if self.defenseMap[x][y] is not None and self.defenseMap[x][y] >= 7:
-                    # on check qu'on a pas deja une tour dessus ou à coté
-                    built = False
-                    for building in self.buildings:
-                        if building.type == TOWER and distance(building, Point(x, y)) <= 1:
-                            built = True
-                            break
-                    # et pas sur une mine
-                    for mine in self.mines:
-                        if distance(mine, Point(x, y)) == 0:
-                            built = True
-                            break
-                    if built == False and self.gold > 15:
-                        self.actions.append(f'BUILD TOWER {x} {y}')
-                        self.gold -= 15
-                        self.buildings.append(Building(ME, TOWER, x, y))
-                        #todo: marquer case occupée
 
 
         # Sauvegarde de de la dernière chance : on spawn des unités au porte de notre base: 
@@ -483,113 +471,35 @@ class Game:
             self.mines.append(Mine(x, y))
 
 
-    # Construction d'une carte avec les points de defense importants chez nous
-    # Pour se faire, pour chaque case à nous on calcule notre surface si on la perd
-    # On va s'en servir pour mettre des tourelles par exemple
+    # Réécrit totalement !
+    # On met dans cette carte les points d'intérêts pour des tourelles. Ce sont des positions stratégiques sur la carte
     def calcul_carte_defense(self):
-        self.defenseMap = [ [ None for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
+        self.defenseMap = [ [ 0 for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
 
-        ############################################## Probleme de timeout, on verra apres #############################################
-        return
-
-        # si on a pas bcoup de cases en fait on s'en fout, soit c'est trop tôt, soit on est mort
-        # pareil si on possede toute la carte
-        nbCasesANous = len(self.get_points_matching([ACTIVE]))
-        if nbCasesANous < 15 or len(self.get_points_matching([ACTIVEOPPONENT])) < 15:
-            return
-
-        # on passe maintenant au taff
-        casesPossibles = self.get_my_HQ().sortNearest(self.get_points_matching([ACTIVE]))
-        positionsCalculees = 0
-        positionsPossibles = len(casesPossibles)
-        for currentCase in casesPossibles:
-            # on a assez de temps ?
-            if self.check_timeout():
-                sys.stderr.write(f"TIMEOUT in calcul_carte_defense({currentCase}) Fait: {positionsCalculees}/{positionsPossibles}\n")
-                return
-            
-            positionsCalculees += 1
-
-            # on peut sauter la case si on a déjà une tour dessus ou à une distance de 1
-            # TODO: reecrire ça mieux ...
-            if currentCase in self.buildings:
-                self.defenseMap[currentCase.x][currentCase.y] = 0
-                continue
-            
-            # on regarde si la case est déjà couverte par une tour
-            skip = False
-            for point in currentCase.getAdjacentes(self.map):
-                for building in self.buildings:
-                    if building.type == TOWER and building == point:
-                        skip = True
-                        break
-            if skip:
-                self.defenseMap[currentCase.x][currentCase.y] = 0
-                continue
-
-            # On regarde maintenant si TOUTES les cartes autour de nous sont à nous ou neutres. Si oui, on peut sauter
-            nbCasesANous = 0
-            for x in range(currentCase.x-1, currentCase.x+2):
-                for y in range(currentCase.y-1, currentCase.y+2):
-                    if x >= 0 and x < WIDTH and y >= 0 and y < HEIGHT:
-                        if self.map[x][y] in [ACTIVE, NEUTRE, NEANT]:
-                            nbCasesANous += 1
-                    else:
-                        # pas dans la carte == bon qd mm :p
-                        nbCasesANous += 1
-
-            if currentCase.x == 4 and currentCase.y == 2:
-                sys.stderr.write(f"Sortie (4,2): {nbCasesANous}")
-
-            if nbCasesANous == 9:
-                self.defenseMap[currentCase.x][currentCase.y] = 0
-                continue
-
-            # si on est trop pres de notre QG ça sert à rien
-            if distance(currentCase, self.get_my_HQ()) < 3:
-                self.defenseMap[currentCase.x][currentCase.y] = 0
-                continue
-
-            
-            # la grosse formule commence ici
-            # Etape 1 - on copie la map 
-            # IL FAUT ABSOLUMENT UTILISER DEEPCOPY CAR ON A UN TABLEAU DE TABLEAU!
-            newMap =  copy.deepcopy(self.map)
-
-            # Ensuite on la modifie pour virer la case courante
-            newMap[currentCase.x][currentCase.y] = INACTIVE
-            newMapParcours = [ [ None for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
-
-            # Ici on recalcule une nouvelle carte, en partant de notre base. Donc plus on est loin, plus c'est "cher"
-            aTraiter = [ self.get_my_HQ()  ]
-            debugi = 0
-            while len(aTraiter) > 0 and debugi < 500: # on calcule pas trop loin
-                debugi += 1
-                element = aTraiter.pop(0)
-
-                # TODO: normalement déjà check plus bas (case not in aTraiter) mais bon ...
-                if newMapParcours[element.x][element.y] == 1:
-                    sys.stderr.write(f"ON DEVRAIT PAS ETRE LA!")
-                    continue
-                
-                newMapParcours[element.x][element.y] = 1
-                
-                cases = element.getAdjacentes(newMap, [ACTIVE])
-                for case in cases:
-                    if newMapParcours[case.x][case.y] is None and case not in aTraiter:
-                        aTraiter.append(case)
-            
-            # Maintenant on calcule le nbre de cases à nous: 
-            nbCases = 0
-            for tmpx in range(WIDTH):
-                for tmpy in range(HEIGHT):
-                    if newMapParcours[tmpx][tmpy] == 1:
-                        nbCases += 1
-            self.defenseMap[currentCase.x][currentCase.y] = (nbCasesANous - nbCases)
-
-        #debugPythonMap(self.map)
-        #debugMap(self.defenseMap)
+        # On commence par les 4 cases du milieu
+        for x in range(5, 6):
+            for y in range(5, 6):
+                self.defenseMap[x][y] = 10
         
+        # TODO: trouver les passages souvent utilisés. Peut se calculer au premier round
+        
+
+    # Pose de tourelle sur la defenseMap (prioritaire par rapport à l'achat d'unités)
+    def pose_tourelle(self):
+        for case in self.get_opponent_HQ().sortNearest(self.get_points_matching([ACTIVE])):
+            if self.gold < 15:
+                return
+
+            if self.defenseMap[case.x][case.y] >= 10:
+                # on peut poser ?
+                # une tour c'est comme une unité de niveau 1:p
+                # TODO: verifier si on a une tourelle pas loin
+                if self.can_spawn_level(case.x, case.y, 1) is True and distance(case, case.nearest(self.buildings)) >= 3 and case not in self.mines:
+                    self.actions.append(f'BUILD TOWER {case.x} {case.y}')
+                    self.gold -= 15
+                    # une par tour max
+                    return
+
 
     # Construction de tours avec la tune restante
     def build_towers(self):
@@ -731,10 +641,15 @@ class Game:
 
 
     # verifie si on peut spawn une unite de niveau LEVEL sur la case en question
-    def can_spawn_level(self, x: int, y: int, level: int)->bool:
+    # ignoreAdjacente = ignore le test de case adjacente (quand on fait des projections par exemple)
+    def can_spawn_level(self, x: int, y: int, level: int, ignoreAdjacente = False)->bool:
         if self.spawnMap[x][y] == False:
             return False
-        
+
+        # et on doit avoir une case adjacente !
+        if ignoreAdjacente is False and len(Point(x, y).getAdjacentes(self.map, [ACTIVE])) == 0:
+            return False
+
         if level == 3:
             # on peut tout faire
             return True
@@ -742,10 +657,15 @@ class Game:
         for unit in self.OpponentUnits:
             if unit == Point(x, y) and unit.level >= level:
                 return False
+        
         # on verifie les tourelles
         for building in self.OpponentBuildings:
-            if building.type == TOWER and Point(x, y) in building.getAdjacentes(self.map):
+            # si la case est déjà à nous rien à foutre :p
+            if building.type == TOWER and (building == Point(x, y) or (self.map[x][y] not in [ACTIVE] and Point(x, y) in building.getAdjacentes(self.map))):
                 return False
+        
+        if (x == 7 and y == 5):
+            debugMsg(f"DEBUG75: selfmap={self.map[x][y]}")
         # bah maintenant rien n'empeche :)
         return True
 
@@ -777,7 +697,7 @@ class Game:
             currentDistance = distance(unitDepart, self.get_opponent_HQ())
             currentPos = unitDepart # position courante
             actions = []
-            sys.stderr.write(f"Unit({unitDepart.x},{unitDepart.y}): curDist={currentDistance}, curGold={currentGold}")
+            sys.stderr.write(f"Unit({unitDepart.x},{unitDepart.y}): curDist={currentDistance}, curGold={currentGold} ")
             while currentDistance > 0 and currentGold > 0:
                 # on fait des trucs
                 found = False
@@ -786,17 +706,20 @@ class Game:
                     if self.map[voisin.x][voisin.y] == NEANT:
                         continue
 
+                    # on verifie le chemin le plus court
+                    if distance(voisin, self.get_opponent_HQ()) != currentDistance-1:
+                        continue
+
                     # on verifie que la case est vide
                     # TODO: améliorer ici pour chercher plsieurs chemins ...
-                    if distance(voisin, self.get_opponent_HQ()) == currentDistance-1:
-                        for level in [1, 2, 3]:
-                            if self.can_spawn_level(voisin.x, voisin.y, level):
-                                currentPos = voisin
-                                currentDistance -= 1
-                                currentGold -= Unit.TRAINING[level]
-                                found = True
-                                actions.append(f'TRAIN {level} {voisin.x} {voisin.y}')
-                                break
+                    for level in [1, 2, 3]:
+                        if self.can_spawn_level(voisin.x, voisin.y, level, True):
+                            currentPos = voisin
+                            currentDistance -= 1
+                            currentGold -= Unit.TRAINING[level]
+                            found = True
+                            actions.append(f'TRAIN {level} {voisin.x} {voisin.y}')
+                            break
                         # ici on teste si y'a un mec de niveau 2 ou 3 qu'on peut butter
 
 
@@ -805,7 +728,7 @@ class Game:
                     break
             
             # au fait c'est bon ?
-            sys.stderr.write(f"Dist finale: {currentDistance}, gold={currentGold}, found={found}\n")
+            sys.stderr.write(f"distFinale: {currentDistance}, gold={currentGold}, found={found}\n")
             if found == True and currentDistance == 0 and currentGold >= 0:
                 self.actions.extend(actions)
                 self.actions.append("MSG LONG LIVE THE KING") # pour reconnaitre qu'on est dans cette strat'
@@ -1041,6 +964,7 @@ class Game:
     def build_output(self):
         self.timingFunc(self.calcul_carte_defense)
 
+        # deplacement des unites
         self.timingFunc(self.move_units)
 
         # On peut gagner en un tour ?
@@ -1049,6 +973,10 @@ class Game:
 
         # Calcul si on peut decouper l'adversaire
         self.timingFunc(self.calcul_decoupe_adversaire)
+
+        # Tourelles défensives
+        if self.tour >= 10:
+            self.timingFunc(self.pose_tourelle)
 
         # on a encore de la tune ? on essaie !
         self.timingFunc(self.protect_base)
@@ -1069,15 +997,16 @@ class Game:
         # Temps mis dans chaque fonction: 
         totalTime = self.getTotalTime()
 
-        sys.stderr.write("TOUR #"+str(self.tour)+": "+str(totalTime)+"ms\n")
+        sys.stderr.write("TOUR #"+str(self.tour)+": "+str(totalTime)+"ms - ")
         if totalTime == 0:
             return
 
-        for key, value in debugTiming.items():
+
+        for key, value in sorted(debugTiming.items(), reverse=True, key=lambda x: x[1]):
             sys.stderr.write(key+": "+str(round(value*1000/totalTime*100))+"% ")
         
         # Si on veut recup la carte: 
-        # debugPythonMap(self.map)
+        debugPythonMap(self.map)
 
     # get total time in ms
     def getTotalTime(self)-> int:
@@ -1139,3 +1068,6 @@ def debugMap(macarte, loops = 0):
 
 def debugPythonMap(macarte):
     sys.stderr.write(str(macarte)+"\n")
+
+def debugMsg(msg):
+    sys.stderr.write(str(msg)+"\n")

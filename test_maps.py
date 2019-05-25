@@ -5,7 +5,7 @@ import time
 # Pour faire de beaux dessins
 from PIL import Image, ImageDraw, ImageFont
 
-from cig import Game, Pathfinding, Point, Unit, OPPONENT, ME, distanceMap
+from cig import Game, Pathfinding, Building, Point, Unit, OPPONENT, ME, distanceMap, MINE, TOWER
 
 ## Draw
 DRAWZOOM=50
@@ -315,6 +315,46 @@ def test_algo_capture_directe2():
     # ensuite on verifie les actions
     assert "TRAIN 1 9 9" in g.actions
     assert "TRAIN 2 10 10" in g.actions
+    assert "TRAIN 1 11 11" in g.actions
+
+
+# Un cas qu'on a eu en prod: on a masse tune, on est prêt de la base adverse, et pourtant on capture pas :(
+def test_algo_capture_directe3():
+    g = Game()
+    p = Pathfinding()
+    
+    # attention, carte "inversée" visuellement ici 
+    g.map = [
+        ['O', 'O', 'O', 'O', '#', '#', '#', '#', '#', 'x', 'x', '#'],
+        ['O', 'O', 'O', 'O', 'O', '#', '#', '#', 'O', 'x', 'x', '#'],
+        ['O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'x', '#'],
+        ['#', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', '#'],
+        ['#', 'O', 'O', 'O', 'O', 'O', 'O', '#', '#', '#', 'O', '#'],
+        ['#', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', '#'],
+        ['#', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', '#'],
+        ['#', 'O', '#', '#', '#', 'O', 'O', 'O', 'O', 'O', 'O', '#'],
+        ['#', 'O', 'O', 'O', 'O', 'O', 'O', 'X', 'O', 'O', 'O', '#'],
+        ['#', 'O', 'O', 'O', 'O', 'O', 'X', 'X', 'X', 'O', 'X', 'X'],
+        ['#', 'O', 'O', 'O', '#', '#', '#', 'X', 'X', 'X', 'X', 'X'],
+        ['#', 'O', 'O', '#', '#', '#', '#', '#', 'X', 'X', 'X', 'X']
+    ]
+
+    # on va avoir besoin des bâtiments et unités ennemies: 
+    g.units.append(Unit(ME, 1, 1, 9, 9))
+    g.hq = Point(0, 0)
+    g.opponentHq = Point(11,11)
+    g.OpponentBuildings.append(Building(OPPONENT, TOWER, 10, 10))
+    g.gold = 145
+    g.income = 1 # doit pas jouer
+    #drawMap(g.map, "cd3-map")
+    g.calcul_distance_map()
+
+    assert g.calcul_capture_directe() is True
+    # ensuite on verifie les actions
+    print(g.actions)
+    assert "TRAIN 3 10 9" in g.actions
+    assert "TRAIN 1 11 9" in g.actions
+    assert "TRAIN 3 11 10" in g.actions
     assert "TRAIN 1 11 11" in g.actions
 
 # Decoupage de l'armée adverse
