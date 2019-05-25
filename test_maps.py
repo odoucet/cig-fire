@@ -222,7 +222,7 @@ def test_algo_distance2():
 
     #drawMap(macarte, "mapdistance")
 
-    startTime = time.time()
+    #startTime = time.time()
     distanceMap= g.buildDistanceMap(macarte, Point(0, 0))
     #drawMap(distanceMap, "distancemap3","defmap", "Temps de construction: "+str(time.time()-startTime))
     assert distanceMap[4][4] is None
@@ -230,7 +230,7 @@ def test_algo_distance2():
     assert distanceMap[9][9] is not None and distanceMap[9][9] == 18
 
     # Autre cas avec la même carte : départ au milieu ! 
-    startTime = time.time()
+    #startTime = time.time()
     distanceMap= g.buildDistanceMap(macarte, Point(5, 5))
     #drawMap(distanceMap, "distancemap4","defmap", "Temps de construction: "+str(time.time()-startTime))
     assert distanceMap[10][8] is None
@@ -240,7 +240,6 @@ def test_algo_distance2():
 # la capture directe, c'est le fait de spawner pleins d'unités lvl1 jusqu'à la base ennemie
 def test_algo_capture_directe1():
     g = Game()
-    p = Pathfinding()
     
     # attention, carte "inversée" visuellement ici 
     g.map = [
@@ -321,7 +320,6 @@ def test_algo_capture_directe2():
 # Un cas qu'on a eu en prod: on a masse tune, on est prêt de la base adverse, et pourtant on capture pas :(
 def test_algo_capture_directe3():
     g = Game()
-    p = Pathfinding()
     
     # attention, carte "inversée" visuellement ici 
     g.map = [
@@ -360,7 +358,6 @@ def test_algo_capture_directe3():
 # Decoupage de l'armée adverse
 def test_algo_decoupe_ennemi():
     g = Game()
-    p = Pathfinding()
     
     # attention, carte "inversée" visuellement ici 
     g.map = [
@@ -391,6 +388,7 @@ def test_algo_decoupe_ennemi():
     g.gold   = 33
     g.income = 27
     g.tour = 30 # tour 30 !
+    g.calcul_distance_map()
 
     drawMap(g.map, "decoupe1-map")
 
@@ -404,3 +402,86 @@ def test_algo_decoupe_ennemi():
     assert "TRAIN 1 5 10" in g.actions
 
 
+# cas pratique de decoupage HORIZONTAL, avec un muret (mais on possede le reste)
+def test_algo_decoupe_ennemi2():
+    g = Game()
+    
+    # attention, carte "inversée" visuellement ici 
+    g.map = [
+        ['O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', '#', '#'],
+        ['O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', '#'],
+        ['O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', 'O', '#', '#'],
+        ['#', '#', '#', '#', 'O', 'O', 'O', 'O', 'O', 'O', '#', '#'],
+        ['#', '#', '#', 'O', 'O', 'O', 'O', 'O', 'O', '#', '#', '#'],
+        ['#', '#', '#', 'O', 'O', 'O', 'O', 'O', 'O', '#', '#', '#'],
+        ['#', '#', '#', 'X', 'O', 'O', 'O', 'O', 'O', '#', '#', '#'],
+        ['#', '#', '#', 'X', 'X', 'O', 'O', 'O', 'O', '#', '#', '#'],
+        ['#', '#', 'X', 'X', 'O', 'O', 'O', 'O', '#', '#', '#', '#'],
+        ['#', '#', 'X', 'X', 'X', 'O', 'X', 'O', 'O', 'X', 'X', 'X'],
+        ['#', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X'],
+        ['#', '#', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X', 'X']
+    ]
+
+    g.units.append(Unit(ME, 1, 1, 9, 8))
+    g.hq = Point(0, 0)
+    g.opponentHq = Point(11,11)
+    g.gold   = 36
+    g.income = 27
+    g.tour = 30 # tour 30 !
+    g.calcul_distance_map()
+    #drawMap(g.map, "decoupe2-map")
+
+    g.startTime = time.time()
+    assert g.calcul_decoupe_adversaire() is True
+    print(g.actions)
+    assert "TRAIN 1 10 8" in g.actions
+    assert "TRAIN 1 11 8" in g.actions
+
+# cas pratique de decoupage VERTICAL, EN PARTANT DU BAS
+def test_algo_decoupe_ennemi3():
+    g = Game()
+    
+    # attention, carte "inversée" visuellement ici 
+    g.map = [
+        ['X', 'X', 'X', 'X', 'X', 'X', '#', '#', '#', '#', '#', '#'],
+        ['X', 'X', 'X', 'X', 'X', 'X', '#', '#', '#', '#', '#', '#'], 
+        ['X', 'X', 'X', 'X', 'X', 'X', '#', '#', '#', '#', '#', '#'], 
+        ['X', 'X', 'X', 'X', 'X', '#', '#', '#', 'O', 'O', '#', '#'], 
+        ['X', 'X', 'X', 'X', 'X', '#', '#', 'O', 'O', 'O', 'O', '#'], 
+        ['#', 'X', 'X', 'X', 'O', 'O', 'O', 'O', 'O', 'O', 'O', '#'], 
+        ['#', 'X', 'X', 'X', 'X', 'X', 'X', 'O', 'O', 'O', 'O', '#'], 
+        ['#', 'X', 'X', 'X', 'X', '#', '#', 'O', 'O', 'O', 'O', 'O'], 
+        ['#', '#', 'X', 'X', '#', '#', '#', 'O', 'O', 'O', 'O', 'O'], 
+        ['#', '#', '#', '#', '#', '#', 'O', 'O', 'O', 'O', 'O', 'O'], 
+        ['#', '#', '#', '#', '#', '#', 'O', 'O', 'O', 'O', 'O', 'O'], 
+        ['#', '#', '#', '#', '#', '#', 'O', 'O', 'O', 'O', 'O', 'O']
+    ]
+
+    g.units.append(Unit(ME, 1, 1, 5, 4))
+    g.OpponentUnits.append(Unit(OPPONENT, 1, 1, 6, 1))
+    g.OpponentUnits.append(Unit(OPPONENT, 1, 1, 6, 2))
+    g.OpponentUnits.append(Unit(OPPONENT, 1, 1, 6, 3))
+    g.hq = Point(11, 11)
+    g.opponentHq = Point(0,0)
+    g.gold   = 39
+    g.income = 23
+    g.tour = 30 # tour 30 !
+    g.calcul_distance_map()
+    #drawMap(g.map, "decoupe3-map")
+
+    g.startTime = time.time()
+    assert g.calcul_decoupe_adversaire() is True
+    print(g.actions)
+    assert "TRAIN 1 5 3" in g.actions
+    assert "TRAIN 1 5 2" in g.actions
+    assert "TRAIN 1 5 1" in g.actions
+
+
+def test_pythonRef():
+    p1 = Point(1,1)
+    PointList = [ p1, Point(2,2), Point(3, 3)]
+    for point in PointList:
+        point.x = 5
+    
+    assert(Point(5, 2) in PointList)
+    assert(p1.x  == 5)

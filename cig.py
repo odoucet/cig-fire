@@ -3,6 +3,8 @@ import time
 import copy
 import random
 import math
+from itertools import chain
+import re
 
 # MAP SIZE
 WIDTH = 12
@@ -24,6 +26,9 @@ ACTIVE = "O"
 INACTIVE = "o"
 ACTIVEOPPONENT = "X"
 INACTIVEOPPONENT = "x"
+
+# Compilations re
+TRAIN_PATTERN = re.compile("^TRAIN ([0-9]*) ([0-9]*) ([0-9]*)$")
 
 # On met notre distanceMap en global pour simplifier le code ... et désolé c'est dégueu :(
 distanceMap = [ [ None for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
@@ -178,6 +183,27 @@ class Game:
                     casesVides.append(Point(x, y))
         return casesVides
 
+    # Met à jour la position d'une unité (putain de pass-by-reference-mais-en-fait-non en Python)
+    def update_unit_pos(self, owner, id, position: Point):
+        if owner == ME:
+            for unit in self.units:
+                if unit.id == id:
+                    unit.x = position.x
+                    unit.y = position.y
+                    self.map[position.x][position.y] = ACTIVE
+                    self.update_spawnMap()
+                    return
+
+        if owner == OPPONENT:
+            for unit in self.OpponentUnits:
+                if unit.id == id:
+                    unit.x = position.x
+                    unit.y = position.y
+                    self.map[position.x][position.y] = ACTIVEOPPONENT
+                    self.update_spawnMap()
+                    return
+
+
     # Strategie de deplacement des unites (Olivier)
     # un truc que la règle ne dit pas de facon claire : si un soldat est sur une case inactive, il meurt !
     def move_units(self):
@@ -196,10 +222,10 @@ class Game:
                 tmpEnnemi.extend(self.OpponentBuildings)
                 destination = unit.nearest(tmpEnnemi)
 
+                # get_next_pos vérifie déjà si le déplacement est possible
                 nextPos = self.get_next_pos(unit, destination)
                 if nextPos is not None:
                     self.actions.append(f'MOVE {unit.id} {nextPos.x} {nextPos.y}')
-                    self.map[nextPos.x][nextPos.y] = ACTIVE
                     # virer l'unite/building si y'a
                     for unit in self.OpponentUnits:
                         if unit == nextPos:
@@ -209,10 +235,8 @@ class Game:
                         if building == nextPos:
                             self.OpponentBuildings.remove(building)
                             break
-                    # maj de notre position
-                    unit.x = nextPos.x
-                    unit.y = nextPos.y
-                    self.update_spawnMap()
+                    # maj de notre position (fait tout le taff)
+                    self.update_unit_pos(ME, unit.id, nextPos)
                     continue
 
             # Si ennemi de mm niveau a coté on bouge pas
@@ -234,10 +258,7 @@ class Game:
                 voisin = voisins.pop(0)
                 if self.can_spawn_level(voisin.x, voisin.y, unit.level):
                     self.actions.append(f'MOVE {unit.id} {voisin.x} {voisin.y}')
-                    unit.x = voisin.x
-                    unit.y = voisin.y
-                    self.map[voisin.x][voisin.y] = ACTIVE
-                    self.update_spawnMap()
+                    self.update_unit_pos(ME, unit.id, voisin)
                     moved = True
                     continue
 
@@ -249,11 +270,12 @@ class Game:
             if destination is not None: 
                 nextPos = self.get_next_pos(unit, destination)
                 if nextPos is not None:
+                    #debug:
+                    if unit.id == 3:
+                        debugMsg(f"L260 nextPos={nextPos} , currentLevel={unit.level}")
+
                     self.actions.append(f'MOVE {unit.id} {nextPos.x} {nextPos.y}')
-                    unit.x = nextPos.x
-                    unit.y = nextPos.y
-                    self.map[nextPos.x][nextPos.y] = ACTIVE
-                    self.update_spawnMap()
+                    self.update_unit_pos(ME, unit.id, nextPos)
                     # TODO: virer l'unite/building si y'a ...
                     continue
 
@@ -265,6 +287,9 @@ class Game:
     # Stratégie d'entrainement des unites
     # Les niveaux > 1 doivent se faire SUR un ennemi histoire de gagner du temps :)
     def train_units(self):
+        #DEBUG
+        if (self.tour > 15):
+            return
 
         # Strategie: on créé pleins de soldats, et on fait du niveau 2 quand il ne reste que X cases vides
         if len(self.get_points_matching([NEUTRE])) < 30 or len(self.units) >= 10:
@@ -279,15 +304,17 @@ class Game:
                     # on considere qu'il est forcément 2 car on va l'écraser avec un 3
                     ennemi.level = 2
                 
+                # plus rapide que can_spawn_level() car niveau 3 fait ce qu'il veut, nananère
                 if (len(ennemi.getAdjacentes(self.map, [ACTIVE])) > 0 and 
-                self.gold >= (Unit.TRAINING[ennemi.level+1]) and self.income >= Unit.ENTRETIEN[ennemi.level+1]):
-                    self.actions.append(f'TRAIN {ennemi.level+1} {ennemi.x} {ennemi.y}')
-                    self.gold   -= Unit.TRAINING[ennemi.level+1]
-                    self.income -= Unit.ENTRETIEN[ennemi.level+1] -1 # on prend une case, ça rapporte
+                self.gold >= (Unit.TRAINING[3]) and self.income >= Unit.ENTRETIEN[3]):
+                    self.actions.append(f'TRAIN 3 {ennemi.x} {ennemi.y}')
+                    self.gold   -= Unit.TRAINING[3]
+                    self.income -= Unit.ENTRETIEN[3] -1 # on prend une case, ça rapporte
                     self.map[ennemi.x][ennemi.y] = ACTIVE # case prise maintenant :D
-                    self.units.append(Unit(ME, 1, ennemi.level+1, ennemi.x, ennemi.y))
+                    self.units.append(Unit(ME, 1, 3, ennemi.x, ennemi.y))
                     self.OpponentUnits.remove(ennemi) # on vire l'ennemi
                     self.update_spawnMap()
+                    #debugMsg(f"Spawn Unit3({ennemi}) sur la tronche de {ennemi.id}")
             
             # Boucle 2 : est-ce qu'on peut dégommer une TOUR ennemie en spawnant un niveau 3 dessus ? ^^
             for ennemi in self.get_my_HQ().sortNearest(self.OpponentBuildings):
@@ -308,11 +335,11 @@ class Game:
             for ennemi in self.get_my_HQ().sortNearest(self.OpponentUnits):
                 if ennemi.level > 1:
                     continue
-                
+                # debug:seed=5862311708367631400
+
                 if len(ennemi.getAdjacentes(self.map, [ACTIVE])) > 0:
                     # deux boucles: si on peut faire du niveau 2, ou du niveau 3
-                    tryLevel = range(min(3, ennemi.level+1), 3)
-                    for level in tryLevel:
+                    for level in range(min(3, ennemi.level+1), 3):
                         if (self.can_spawn_level(ennemi.x, ennemi.y, level) and 
                         self.gold >= (Unit.TRAINING[ennemi.level+1]) and self.income >= Unit.ENTRETIEN[ennemi.level+1]):
                             self.actions.append(f'TRAIN {ennemi.level+1} {ennemi.x} {ennemi.y}')
@@ -486,6 +513,9 @@ class Game:
 
     # Pose de tourelle sur la defenseMap (prioritaire par rapport à l'achat d'unités)
     def pose_tourelle(self):
+        # pour être sûr ...
+        self.update_spawnMap()
+
         for case in self.get_opponent_HQ().sortNearest(self.get_points_matching([ACTIVE])):
             if self.gold < 15:
                 return
@@ -495,6 +525,7 @@ class Game:
                 # une tour c'est comme une unité de niveau 1:p
                 # TODO: verifier si on a une tourelle pas loin
                 if self.can_spawn_level(case.x, case.y, 1) is True and distance(case, case.nearest(self.buildings)) >= 3 and case not in self.mines:
+                    debugMsg(f"BUILDTOWER({case}) spawnMap={self.spawnMap[case.x][case.y]}")
                     self.actions.append(f'BUILD TOWER {case.x} {case.y}')
                     self.gold -= 15
                     # une par tour max
@@ -572,7 +603,6 @@ class Game:
         self.opponent_income = int(input())
         self.nbMines = 0
         self.nbOpponentMines = 0
-        self.spawnMap = [ [ True for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
         self.cacheCalculDecoupeX = [ None for x in range( WIDTH ) ]
         self.cacheCalculDecoupeY = [ None for y in range( HEIGHT ) ]
 
@@ -612,6 +642,9 @@ class Game:
                 self.units.append(obj)
             else:
                 self.OpponentUnits.append(Unit(owner, unit_id, level, x, y))
+
+        # spawnMap
+        self.update_spawnMap()
 
         # Cartes des distances.
         # techniquement, pour le pathfinding il faudrait calculer la carte des distances pour chaque point possible.
@@ -664,8 +697,6 @@ class Game:
             if building.type == TOWER and (building == Point(x, y) or (self.map[x][y] not in [ACTIVE] and Point(x, y) in building.getAdjacentes(self.map))):
                 return False
         
-        if (x == 7 and y == 5):
-            debugMsg(f"DEBUG75: selfmap={self.map[x][y]}")
         # bah maintenant rien n'empeche :)
         return True
 
@@ -683,7 +714,6 @@ class Game:
     def calcul_capture_directe(self)->bool:
         # Notre tune == distance max
         # comme on fait ce calcul à chaque tour, case la plus proche de l'ennemi == forcément une unité
-        # TODO: si on fait ça, vérifier qu'une unité se déplace bien sur une case permise (== gérer les tours adverses)
 
         for unitDepart in self.get_opponent_HQ().sortNearest(self.units):
             # on verifie si economiquement c'est viable
@@ -780,9 +810,22 @@ class Game:
             sys.stderr.write(f"DecoupeY({obj['y']})={obj['score']}\n")
             self.actions.extend(self.cacheCalculDecoupeY[obj['y']])
         else:
-            sys.stderr.write(f"je suis pas sense etre la")
-        # TODO: rejouer les actions TRAIN (en grepant ce qu'on fait), pour mettr à jour gold et income
+            self.actions.append(f"ERROR: CODE INVALIDE EXECUTE") # que ce soit un peu visuel ...
+        
+        # On rejoue les actions TRAIN (en grepant ce qu'on fait), pour mettr à jour gold et income
         # comme ça on peut encore spawn des unites apres :p
+        for action in self.actions:
+            match = TRAIN_PATTERN.match(action)
+            if match is not None:
+                level = int(match.group(1))
+                x = int(match.group(2))
+                y = int(match.group(3))
+                self.gold   -= Unit.TRAINING[level]
+                self.income -= Unit.ENTRETIEN[level] -1 # on prend une case, ça rapporte
+                self.map[x][y] = ACTIVE # case prise maintenant :D
+                self.units.append(Unit(ME, 1, level, x, y))
+                #todo: virer les adversaires qu'on a écrasé lamentablement
+        self.update_spawnMap()
 
         return True
 
@@ -796,6 +839,49 @@ class Game:
         # on en profite pour garder un tableau avec les operations. Comme on calcule, autant pas faire le taff deux fois
         actions = []
 
+        # Calculer combien perd l'adversaire. C'est le plus simple, ça permet de voir si ça a un intérêt
+        # TODO: prendre en compte si l'ennemi a une tour dans la zone "découpée" : lui permet de garder des cases et perd sans doute de son intéret ...
+        argentPerdu = 0
+        cases = self.get_points_matching([ACTIVEOPPONENT])
+        for case in cases:
+            # si on decoupe en vertical + HQ(0,0):
+            if self.hq.x == 0 and y is None and case.x <= x:
+                argentPerdu += 1
+
+            # si on découpe en horizontal + HQ(0,0):
+            elif self.hq.x == 0 and x is None and case.y <= y:
+                argentPerdu += 1
+
+            # si on decoupe en vertical + HQ(1,11):
+            if self.hq.x == 11 and y is None and case.x >= x:
+                argentPerdu += 1
+
+            # si on découpe en horizontal + HQ(11,11):
+            elif self.hq.x == 11 and x is None and case.y >= y:
+                argentPerdu += 1 
+
+        # Armee: 
+        for unit in self.OpponentUnits:
+            # si on decoupe en vertical + HQ(0,0):
+            if self.hq.x == 0 and y is None and unit.x <= x:
+                argentPerdu += Unit.TRAINING[unit.level]
+
+            # si on découpe en horizontal + HQ(0,0):
+            elif self.hq.x == 0 and x is None and unit.y <= y:
+                argentPerdu += Unit.TRAINING[unit.level]
+            
+            # si on decoupe en vertical + HQ(11,11):
+            if self.hq.x == 11 and y is None and unit.x >= x:
+                argentPerdu += Unit.TRAINING[unit.level]
+
+            # si on découpe en horizontal + HQ(11,11):
+            elif self.hq.x == 11 and x is None and unit.y >= y:
+                argentPerdu += Unit.TRAINING[unit.level]
+
+        # on veut qu'il perde au moins deux unites ou une T2
+        if argentPerdu < 20:
+            return 0
+        
         # On part de notre unite et on incrémente vers la droite si on peut construire
         costBuild = 0
 
@@ -819,14 +905,39 @@ class Game:
             # on verifie qu'on a pas de mur entre les deux
             # TODO: on verifie qu'on a TOUT ou que c'est neutral "AVANT" ou "APRES", et on change start/end en consequence
             for tmpy in range(start, end):
-                if self.map[x][tmpy] == NEANT:
-                    # mur au milieu, par securite on fait pas
-                    #sys.stderr.write(f"calcul_decoupe({x},{y}: mur au milieu")
-                    return 0
+                if self.map[x][tmpy] != NEANT:
+                    continue
 
-            # - on regarde si on a une unite sur la ligne au moins
+                # mur au milieu, on ajuste start/end: 
+                # test qu'on a tout à gauche: 
+                on_a_tout_a_gauche = True
+                on_a_tout_a_droite = True
+                for tmp2y in range(0, tmpy):
+                    if self.map[x][tmp2y] not in [NEANT, ACTIVE, INACTIVE]:
+                        on_a_tout_a_gauche = False
+                        break
+                
+                # test qu'on a tout à droite: 
+                for tmp2y in range(tmpy, WIDTH):
+                    if self.map[x][tmp2y] not in [NEANT, ACTIVE, INACTIVE]:
+                        on_a_tout_a_droite = False
+                        break
+
+                if on_a_tout_a_gauche == False and on_a_tout_a_droite == False:
+                    debugMsg(f"calcul_decoupe({x},none): mur au milieu et on a pas tout a gauche ou droite")
+                    return 0
+                
+                if on_a_tout_a_gauche:
+                    start = tmpy
+                    break
+                if on_a_tout_a_droite:
+                    end = tmpy
+                    break
+
+            # comme on le disait plus haut, c'est forcément une unité qui est la plus proche
             unitStart = None
-            for unit in self.units:
+            for unit in self.opponentHq.sortNearest(self.units):
+                # l'unité est sur la bonne ligne
                 if unit.x == x:
                     unitStart = unit
                     break
@@ -834,18 +945,17 @@ class Game:
             if unitStart is None:
                 return 0
 
-            # vers la droite, puis la gauche
-            from itertools import chain
-            for tmpy in chain(range(unitStart.y+1, end+1), range(unitStart.y-1, start, -1)):
+            # vers en bas / en haut
+            for tmpy in chain(range(unitStart.y+1, end+1), range(unitStart.y-1, start-1, -1)):
                 # c'est déjà à nous ? 
-                if self.map[x][tmpy] in [ACTIVE, NEUTRE, INACTIVEOPPONENT, INACTIVE, NEANT]:
+                if self.map[x][tmpy] in [ACTIVE, NEANT]:
                     # on a la case, ça coute rien :)
                     continue
    
                 goodToGo = False
                 for level in [1, 2, 3]:
-                    if (self.can_spawn_level(x, tmpy, level) and  
-                    self.gold >= (Unit.TRAINING[level]) and self.income >= Unit.ENTRETIEN[level]):
+                    # TODO: verifier qu'on explose pas le budget
+                    if self.can_spawn_level(x, tmpy, level, True):
                         actions.append(f"TRAIN {level} {x} {tmpy}")
                         costBuild += Unit.TRAINING[level]
                         goodToGo = True
@@ -858,9 +968,9 @@ class Game:
             if costBuild == 0:
                 return 0
 
-        # TODO: faire pareil quand 'y' est défini
+        # faire pareil quand 'y' est défini
         else:
-            #######CE MORCEAU EST COPIE/COLLE PLUS BAS, PUTAIN DE CODE DE MERDE C'EST VRAIMENT DEGUEU ######
+            #######CE MORCEAU EST COPIE/COLLE PLUS HAUT, PUTAIN DE CODE DE MERDE C'EST VRAIMENT DEGUEU ######
             start = 0
             end   = WIDTH-1
             while self.map[start][y] == NEANT and start < HEIGHT:
@@ -875,14 +985,40 @@ class Game:
             # on verifie qu'on a pas de mur entre les deux
             # TODO: on verifie qu'on a TOUT ou que c'est neutral "AVANT" ou "APRES", et on change start/end en consequence
             for tmpx in range(start, end):
-                if self.map[tmpx][y] == NEANT:
-                    # mur au milieu, par securite on fait pas
-                    sys.stderr.write(f"calcul_decoupe({x},{y}: mur au milieu")
+                if self.map[tmpx][y] != NEANT:
+                    continue
+
+                # mur au milieu, on ajuste start/end: 
+                # test qu'on a tout au dessus: 
+                on_a_tout_dessus = True
+                on_a_tout_dessous = True
+                for tmp2x in range(0, tmpx):
+                    if self.map[tmp2x][y] not in [NEANT, ACTIVE, INACTIVE]:
+                        on_a_tout_dessus = False
+                        break
+                
+                # test qu'on a tout dessous
+                for tmp2x in range(tmpx, HEIGHT):
+                    if self.map[tmp2x][y] not in [NEANT, ACTIVE, INACTIVE]:
+                        on_a_tout_dessous = False
+                        break
+
+                if on_a_tout_dessus == False and on_a_tout_dessous == False:
+                    debugMsg(f"calcul_decoupe(none,{y}): mur au milieu et on a pas tout dessus/dessous")
                     return 0
+                
+                if on_a_tout_dessus:
+                    start = tmpx
+                    break
+                if on_a_tout_dessous:
+                    end = tmpx
+                    break
 
             # - on regarde si on a une unite sur la ligne au moins
             unitStart = None
-            for unit in self.units:
+
+            for unit in self.opponentHq.sortNearest(self.units):
+                # sur la bonne ligne
                 if unit.y == y:
                     unitStart = unit
                     break
@@ -890,18 +1026,18 @@ class Game:
             if unitStart is None:
                 return 0
 
-            # vers le bas, puis le haut
-            from itertools import chain
-            for tmpx in chain(range(unitStart.x+1, end+1), range(unitStart.x-1, start, -1)):
+            # vers gauche / Droite
+            debugMsg(f" tmpyChain(y={y}) unitstart:{unitStart}, start={start}, end={end}")
+            for tmpx in chain(range(unitStart.x+1, end+1), range(unitStart.x-1, start-1, -1)):
                 # c'est déjà à nous ? 
-                if self.map[tmpx][y] in [ACTIVE, NEUTRE, INACTIVEOPPONENT, INACTIVE, NEANT]:
+                if self.map[tmpx][y] in [ACTIVE, NEANT]:
                     # on a la case, ça coute rien :)
                     continue
    
                 goodToGo = False
                 for level in [1, 2, 3]:
-                    if (self.can_spawn_level(tmpx, y, level) and  
-                    self.gold >= (Unit.TRAINING[level]) and self.income >= Unit.ENTRETIEN[level]):
+                    # todo: verifier qu'on explose pas le budget
+                    if self.can_spawn_level(tmpx, y, level, True):
                         actions.append(f"TRAIN {level} {tmpx} {y}")
                         costBuild += Unit.TRAINING[level]
                         goodToGo = True
@@ -917,34 +1053,12 @@ class Game:
 
         # si ca coute plus cher que ce qu'on a, ça sert à rien
         if self.gold < costBuild:
-            sys.stderr.write(f"calcul_decoupe({x},{y}): cout {costBuild} > argent {self.gold}, on fait pas\n")
+            debugMsg(f"calcul_decoupe({x},{y})=FALSE: cout {costBuild} > argent {self.gold}\n")
             return 0
 
-        # TODO: prendre en compte si l'ennemi a une tour dans la zone "découpée" : lui permet de garder des cases et perd sans doute de son intéret ...
         #sys.stderr.write(f"({x}, none) actions={actions}\n")
 
-        # Calculer combien perd l'adversaire
-        argentPerdu = 0
-        cases = self.get_points_matching([ACTIVEOPPONENT])
-        for case in cases:
-            # si on decoupe en vertical:
-            if y is None and case.x <= x:
-                argentPerdu += 1
-
-            # si on découpe en horizontal
-            elif x is None and case.y <= y:
-                argentPerdu += 1
-
-        # Armee: 
-        for unit in self.OpponentUnits:
-            # si on decoupe en vertical:
-            if y is None and unit.x <= x:
-                argentPerdu += Unit.TRAINING[unit.level]
-
-            # si on découpe en horizontal
-            elif x is None and unit.y <= y:
-                argentPerdu += Unit.TRAINING[unit.level]
-
+        
         # on stock les actions
         if y is None:
             self.cacheCalculDecoupeX[x] = actions
@@ -952,7 +1066,7 @@ class Game:
             self.cacheCalculDecoupeY[y] = actions
 
         # coût < (tune perdue par l'adversaire)
-        sys.stderr.write(f"calcul_decoupe({x},{y}): argentPerdu={argentPerdu} costBuild={costBuild} start={start} end={end}\n")
+        debugMsg(f"calcul_decoupe({x},{y})=TRUE: argentPerdu={argentPerdu} costBuild={costBuild} start={start} end={end}\n")
         return (argentPerdu/costBuild)
 
     def timingFunc(self, funcName):

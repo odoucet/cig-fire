@@ -48,6 +48,9 @@ une fonction pour trouver toutes les cases de "bordure" de notre camp:
 https://github.com/Azkellas/a-code-of-ice-and-fire/blob/develop/src/test/Agent2.py#L84
 (à adapter)
 
+Un algo python qui reprend l'interface du jeu: 
+https://github.com/Yuu6883/CodeOfFireAndIceNE
+
 TODO
 ====
 J'ai merdé les appels de fonctions Point, qui devraient pas passer tous les arguments mais faire monunite.getAdjacentes(). A réécrire
