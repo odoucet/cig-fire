@@ -335,6 +335,11 @@ class Game:
                 if self.nbUnit[3]-self.nbOpponentUnit[3] >= Unit.STRAT_MAX[3]:
                     break
 
+                # si on est sur un bord de carte, on s'en fout aussi
+                # en bas à gauche                en haut à droite
+                if (ennemi.x <= 3 and ennemi.y >= 8) or (ennemi.x >= 8 and ennemi.y <= 3):
+                    continue
+
                 if ennemi.level == 1:
                     # petite merde, on te considère même pas!
                     continue
@@ -357,8 +362,9 @@ class Game:
                 if self.nbUnit[3]-self.nbOpponentUnit[3] >= Unit.STRAT_MAX[3]:
                     break
                 
-                # on veut pas de tours trop proches du bord ...
-                if ennemi.x <= 2 or ennemi.x >= 9 or ennemi.y <= 2 or ennemi.y >= 9:
+                # si on est sur un bord de carte, on s'en fout aussi
+                # en bas à gauche                en haut à droite
+                if (ennemi.x <= 3 and ennemi.y >= 8) or (ennemi.x >= 8 and ennemi.y <= 3):
                     continue
                 
                 if (len(ennemi.getAdjacentes(self.map, [ACTIVE])) > 0 and 
@@ -368,6 +374,11 @@ class Game:
             # Boucle 4: est-ce qu'on peut dégommer un niveau 1 en spawnant un 2 dessus ? 
             for ennemi in self.get_my_HQ().sortNearest(self.OpponentUnits):
                 if ennemi.level > 1:
+                    continue
+
+                # si on est sur un bord de carte, on s'en fout aussi
+                # en bas à gauche                en haut à droite
+                if (ennemi.x <= 3 and ennemi.y >= 8) or (ennemi.x >= 8 and ennemi.y <= 3):
                     continue
                 
                 if len(ennemi.getAdjacentes(self.map, [ACTIVE])) > 0:
@@ -454,6 +465,11 @@ class Game:
             # on entraine sur une case à nous, la plus proche du QG adverse
             case = casesSpawn.pop(0)
 
+            # si on est sur un bord de carte, on s'en fout aussi
+            # en bas à gauche                en haut à droite
+            if (case.x <= 3 and case.y >= 8) or (case.x >= 8 and case.y <= 3):
+                continue
+
             if self.can_spawn_level(case.x, case.y, 1):
                 self.spawn_unit(1, case.x, case.y)
                 casesSpawn.extend(case.getAdjacentes(self.map, [INACTIVE, INACTIVEOPPONENT, ACTIVEOPPONENT, NEUTRE]))
@@ -479,9 +495,16 @@ class Game:
         if len(self.get_points_matching([NEUTRE])) < 10 and self.gold < 150+(20+4*self.nbMines):
             return
 
-        # d'un point de vue économique on en veut pas plus d'une d'avance sur l'ennemi (sauf si max tunes)
-        if self.nbMines >= self.nbOpponentMines+1 and self.gold < 50+(20+4*self.nbMines):
-            self.actions.append(f'MSG NOBUILDMINE gold < {50+(20+4*self.nbMines)}')
+
+        # Si nos armées sont très loin l'une de l'autre, prenons davantage de risque !
+        if len(self.OpponentUnits) > 0 and len(self.units) > 0 and distance(self.hq.nearest(self.OpponentUnits), self.opponentHq.nearest(self.units)) >= 4:
+            maxAvanceMine = 2
+        else:
+            # on fait gaffe économiquement
+            maxAvanceMine = 1
+        
+        if self.nbMines >= self.nbOpponentMines+maxAvanceMine:
+            self.actions.append(f'MSG NOBUILDMINE+{maxAvanceMine}')
             return
 
         for mine in self.get_my_HQ().sortNearest(self.mines): 
@@ -583,8 +606,8 @@ class Game:
         self.defenseMap = [ [ 0 for y in range( HEIGHT ) ] for x in range( WIDTH ) ]
 
         # On commence par les 4 cases du milieu
-        for x in range(5, 6):
-            for y in range(5, 6):
+        for x in range(4, 7):
+            for y in range(4, 7):
                 self.defenseMap[x][y] = 10
         
         # TODO: trouver les passages souvent utilisés. Peut se calculer au premier round
@@ -617,10 +640,8 @@ class Game:
         if self.income < self.opponent_income:
             return # si on est à la bourre en éco on va garder notre tune
         
-        debugMsg("on essaie de poser une nouvelle tour")
         for case in self.get_opponent_HQ().sortNearest(self.get_points_matching([ACTIVE])):
             condition = self.can_spawn_level(case.x, case.y, 1) is True and distance(case, case.nearest(self.buildings)) >= 3 and case not in self.mines
-            debugMsg(f"")
             if self.OpponentUnits:
                 condition = condition and distance(case, case.nearest(self.OpponentUnits)) <= 2
             if condition:
