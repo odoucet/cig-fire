@@ -32,3 +32,6 @@ ToDo
 ----
 Use local engine: https://github.com/Yuu6883/CodeOfFireAndIceNE
 
+Algos concurrents intéressants à lire
+-------------------------------------
+https://github.com/DollarAkshay/CodinGame/blob/master/Multiplayer/C%2B%2B/A%20Code%20of%20Ice%20and%20Fire/Gold_League.cpp
